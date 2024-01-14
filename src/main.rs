@@ -23,7 +23,7 @@ use tokio_tungstenite::tungstenite::Message;
 async fn main() -> Result<()> {
     let addr = TradeStreamActor.start();
     let (mut ws_state, Response) =
-        Client::connect_with_stream_name(&StreamNameGenerator::trades_by_symbol("ethusdt").await)
+        Client::connect_with_stream_name(&StreamNameGenerator::trades_by_symbol("btcusdt").await)
             .await?;
     let (write, read) = ws_state.socket.split();
     read.for_each(|message| async {
@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
             Ok(Message::Text(text)) => {
                 let value: Value = serde_json::from_str(&text).expect("some error 1");
                 let trades: BinanceTrades = serde_json::from_value(value).expect("some error 2");
-                addr.do_send(TradeStreamMessage { data: trades });
+                addr.try_send(TradeStreamMessage { data: trades });
             }
             _ => (),
         }

@@ -30,6 +30,22 @@ pub struct TakerTrades {
     pub transaction_timestamp: i64,
 }
 
+impl fmt::Display for TakerTrades {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "symbol: {}, side: {}, price: {}, qty: {}, local_ids: {}, exch_id: {}, transaction_timestamp: {} ",
+            self.symbol,
+            self.side,
+            self.price,
+            self.qty,
+            self.local_ids,
+            self.exch_id,
+            self.transaction_timestamp,
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct BookModel<'a> {
     pub symbol: &'a str,
@@ -80,6 +96,16 @@ impl AsRef<str> for Side {
         }
     }
 }
+
+impl fmt::Display for Side {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Side::Buy => write!(f, "{}", "buy"),
+            Side::Sell => write!(f, "{}", "Sell"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct BinanceTrades {
     #[serde(rename = "e")]
@@ -105,6 +131,7 @@ pub struct BinanceTrades {
     #[serde(rename = "m")]
     pub is_buyer_mm: bool,
 }
+
 impl fmt::Display for BinanceTrades {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(

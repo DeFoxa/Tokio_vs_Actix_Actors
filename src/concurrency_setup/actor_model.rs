@@ -19,6 +19,7 @@ where
 {
     type Result = Result<TakerTrades>;
 }
+
 impl<T> fmt::Display for TradeStreamMessage<T>
 where
     T: ToTakerTrades + Display,
@@ -36,7 +37,8 @@ impl Actor for TradeStreamActor {
 impl<T: ToTakerTrades + Display + 'static> Handler<TradeStreamMessage<T>> for TradeStreamActor {
     type Result = Result<TakerTrades>;
     fn handle(&mut self, msg: TradeStreamMessage<T>, _ctx: &mut Self::Context) -> Self::Result {
-        println!("data {}", msg);
-        msg.data.to_trades_type()
+        let tt = msg.data.to_trades_type()?;
+        println!("data {}", tt);
+        return Ok(tt);
     }
 }
