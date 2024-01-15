@@ -156,10 +156,8 @@ impl Handler<SequencerMessage> for SequencerActor {
                 {
                     self.queue.push(msg.clone());
                     log::debug!("processing paused, time since last update > 1s (1000ms)");
-                    println!("Test");
                 } else {
                     self.matching_engine_addr.do_send(trade.clone());
-                    println!("msg {:?}", msg);
                 }
             }
         }
@@ -247,13 +245,13 @@ impl Handler<BookModel> for MatchingEngineActor {
     type Result = ();
 
     fn handle(&mut self, msg: BookModel, ctx: &mut Context<Self>) -> Self::Result {
-        println!("msg {:?}", msg);
+        println!(" {:?}", msg);
     }
 }
 
 impl Handler<TakerTrades> for MatchingEngineActor {
     type Result = ();
     fn handle(&mut self, msg: TakerTrades, ctx: &mut Context<Self>) -> Self::Result {
-        println!("msg {:?}", msg);
+        println!("{:?}", msg);
     }
 }
