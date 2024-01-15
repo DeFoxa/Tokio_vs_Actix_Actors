@@ -1,5 +1,4 @@
 use crate::utils::*;
-use crate::utils::*;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{
@@ -8,6 +7,7 @@ use serde::{
 };
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 pub trait ToTakerTrades {
@@ -47,11 +47,11 @@ impl fmt::Display for TakerTrades {
 }
 
 #[derive(Debug, Clone)]
-pub struct BookModel<'a> {
-    pub symbol: &'a str,
+pub struct BookModel {
+    pub symbol: String,
     pub bids: Vec<Quotes>,
     pub asks: Vec<Quotes>,
-    pub timestamp: Option<i64>,
+    pub timestamp: i64,
     // pub exchange_id: Option<i64>,
 }
 
@@ -147,6 +147,67 @@ impl fmt::Display for BinanceTrades {
             self.last_trade_id,
             self.trade_timestamp
         )
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BinancePartialBook {
+    #[serde(rename = "e")]
+    pub depth_update: String,
+    #[serde(rename = "E")]
+    pub event_timestamp: i64,
+    #[serde(rename = "T")]
+    pub timestamp: i64,
+    #[serde(rename = "s")]
+    pub symbol: String,
+    #[serde(rename = "U")]
+    pub first_update_id: i64,
+    #[serde(rename = "u")]
+    pub final_update_id: i64,
+    #[serde(rename = "pu")]
+    pub final_update_id_last_stream: i64,
+    ///array where index 0: price level, 1: quantity
+    #[serde(rename = "b")]
+    // #[serde(deserialize_with = "deserialize_string_array_to_f64_array")]
+    pub bids: Vec<[String; 2]>,
+    #[serde(rename = "a")]
+    // #[serde(deserialize_with = "deserialize_string_array_to_f64_array")]
+    pub asks: Vec<[String; 2]>,
+}
+
+static NEXT_ID: AtomicU32 = AtomicU32::new(1);
+
+impl ToTakerTrades for BinanceTrades {
+    fn to_trades_type(&self) -> Result<TakerTrades> {
+        let side = match self.is_buyer_mm {
+            true => Side::Sell,
+            false => Side::Buy,
+        };
+        Ok(TakerTrades {
+            symbol: self.symbol.clone(),
+            side: side,
+            price: self.price,  /* .parse::<f64>()? */
+            qty: self.quantity, /* .parse::<f64>()? */
+            local_ids: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+            exch_id: self.last_trade_id,
+            transaction_timestamp: self.trade_timestamp,
+        })
+    }
+}
+
+impl ToBookModels for BinancePartialBook {
+    fn to_bookstate(&self) -> Result<BookState> {
+        todo!();
+    }
+
+    fn to_book_model(&self) -> Result<BookModel> {
+        Ok(BookModel {
+            symbol: self.symbol.clone(),
+            bids: convert_quotes(self.bids.clone()),
+            asks: convert_quotes(self.asks.clone()),
+            timestamp: self.timestamp,
+        })
     }
 }
 

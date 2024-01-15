@@ -98,7 +98,7 @@ impl DeserializeExchangeStreams {
     }
 }
 
-fn convert_quotes<'a>(data: Vec<[String; 2]>) -> Vec<Quotes> {
+pub fn convert_quotes<'a>(data: Vec<[String; 2]>) -> Vec<Quotes> {
     data.into_iter()
         .filter_map(|quote| {
             let levels = quote[0].parse::<f64>().ok()?;
@@ -191,38 +191,4 @@ pub struct BinanceSingleBookTicker {
     pub ask_level: String,
     #[serde(rename = "A")]
     pub ask_qty: String,
-}
-
-static NEXT_ID: AtomicU32 = AtomicU32::new(1);
-
-impl ToTakerTrades for BinanceTrades {
-    fn to_trades_type(&self) -> Result<TakerTrades> {
-        let side = match self.is_buyer_mm {
-            true => Side::Sell,
-            false => Side::Buy,
-        };
-        Ok(TakerTrades {
-            symbol: self.symbol.clone(),
-            side: side,
-            price: self.price,  /* .parse::<f64>()? */
-            qty: self.quantity, /* .parse::<f64>()? */
-            local_ids: NEXT_ID.fetch_add(1, Ordering::Relaxed),
-            exch_id: self.last_trade_id,
-            transaction_timestamp: self.trade_timestamp,
-        })
-    }
-}
-impl ToBookModels for BinancePartialBook {
-    fn to_bookstate(&self) -> Result<BookState> {
-        todo!();
-    }
-
-    fn to_book_model(&self) -> Result<BookModel> {
-        Ok(BookModel {
-            symbol: self.symbol.as_ref(),
-            bids: convert_quotes(self.bids.clone()),
-            asks: convert_quotes(self.asks.clone()),
-            timestamp: Some(self.timestamp),
-        })
-    }
 }
