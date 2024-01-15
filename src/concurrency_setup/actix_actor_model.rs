@@ -5,13 +5,16 @@ use anyhow::Result;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fmt;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tracing::{event, info, instrument, Level};
+use tracing_subscriber::prelude::*;
 
 // TODO: Fix the clones tomorrow
 
 /// TradeStream from deserialized exchange specific type to generalized TakerTrades type
+#[derive(Debug)]
 pub struct TradeStreamMessage<T>
 where
     T: ToTakerTrades,
@@ -34,7 +37,7 @@ where
         write!(f, "message: {}", self.data)
     }
 }
-
+#[derive(Debug)]
 pub struct TradeStreamActor {
     pub sequencer_addr: Addr<SequencerActor>,
 }
@@ -43,18 +46,25 @@ impl Actor for TradeStreamActor {
     type Context = Context<Self>;
 }
 
-impl<T: ToTakerTrades + Display + 'static> Handler<TradeStreamMessage<T>> for TradeStreamActor {
+impl<T: ToTakerTrades + Display + Debug + 'static> Handler<TradeStreamMessage<T>>
+    for TradeStreamActor
+{
     type Result = Result<TakerTrades>;
+
+    #[instrument(target = "TradeStreamActor handle")]
     fn handle(&mut self, msg: TradeStreamMessage<T>, _ctx: &mut Self::Context) -> Self::Result {
         let tt = msg.data.to_trades_type()?;
         self.sequencer_addr
             .do_send(SequencerMessage::TakerTrade(tt.clone()));
+
+        tracing::info!("test 2 ");
 
         // println!("data {}", tt);
         return Ok(tt);
     }
 }
 /// OB_UPDATE Message/Actor  
+#[derive(Debug)]
 pub struct BookModelStreamMessage<T>
 where
     T: ToBookModels,
@@ -87,6 +97,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct BookModelStreamActor {
     pub sequencer_addr: Addr<SequencerActor>,
 }
@@ -95,12 +106,17 @@ impl Actor for BookModelStreamActor {
     type Context = Context<Self>;
 }
 
-impl<T: ToBookModels + 'static> Handler<BookModelStreamMessage<T>> for BookModelStreamActor {
+impl<T: ToBookModels + Debug + 'static> Handler<BookModelStreamMessage<T>>
+    for BookModelStreamActor
+{
     type Result = Result<BookModel>;
+
+    #[instrument(target = "BookModelStreamActor handle")]
     fn handle(&mut self, msg: BookModelStreamMessage<T>, _ctx: &mut Self::Context) -> Self::Result {
         let book = msg.data.to_book_model()?;
         self.sequencer_addr
             .do_send(SequencerMessage::BookModelUpdate(book.clone()));
+        tracing::info!("BookModelStreamMessage handler");
 
         // println!("data {}", tt);
         return Ok(book);
@@ -123,6 +139,7 @@ pub struct SequencerActor {
     pub is_processing_paused: bool,
 }
 impl SequencerActor {
+    #[instrument(target = "Sequencer Actor new")]
     fn new(matching_engine_addr: Addr<MatchingEngineActor>) -> Self {
         SequencerActor {
             queue: BinaryHeap::new(),
@@ -131,6 +148,8 @@ impl SequencerActor {
             is_processing_paused: false,
         }
     }
+
+    #[instrument]
     fn start_periodic_check(ctx: &mut Context<Self>) {
         ctx.notify_later(CheckAndForward, Duration::from_millis(10));
     }
@@ -142,6 +161,7 @@ impl Actor for SequencerActor {
 impl Handler<SequencerMessage> for SequencerActor {
     type Result = ();
 
+    #[instrument(target = "sequencer handle")]
     fn handle(&mut self, msg: SequencerMessage, ctx: &mut Context<Self>) -> Self::Result {
         match msg {
             SequencerMessage::BookModelUpdate(ref book) => {
@@ -170,6 +190,7 @@ pub enum SequencerMessage {
     BookModelUpdate(BookModel),
 }
 impl SequencerMessage {
+    #[instrument]
     fn timestamp(&self) -> i64 {
         match self {
             SequencerMessage::TakerTrade(trade) => trade.transaction_timestamp,
@@ -244,14 +265,19 @@ impl Actor for MatchingEngineActor {
 impl Handler<BookModel> for MatchingEngineActor {
     type Result = ();
 
+    #[instrument(target = "MatchingEngine BookModel handle")]
     fn handle(&mut self, msg: BookModel, ctx: &mut Context<Self>) -> Self::Result {
+        tracing::info!("MatchingEngineActor Bookmodel handler");
         println!(" {:?}", msg);
     }
 }
 
 impl Handler<TakerTrades> for MatchingEngineActor {
     type Result = ();
+
+    #[instrument(target = "MatchingEngine TakerTrades handle")]
     fn handle(&mut self, msg: TakerTrades, ctx: &mut Context<Self>) -> Self::Result {
+        tracing::info!("MatchingEngineActor TakerTrades handler");
         println!("{:?}", msg);
     }
 }

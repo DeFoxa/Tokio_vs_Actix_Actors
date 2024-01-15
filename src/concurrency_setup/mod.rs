@@ -1,1 +1,1 @@
-pub mod actor_model;
+pub mod actix_actor_model;
