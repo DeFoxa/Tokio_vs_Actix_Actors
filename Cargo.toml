@@ -25,4 +25,9 @@ url = "2.5.0"
 sha2 = "0.10.8"
 simple_logger = "4.3.3"
 log = "0.4.20"
+tracing = { version = "0.1.40", features = ["attributes"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-appender = "0.2.3"
+tracing-flame = "0.2.0"
+async-trait = "0.1.77"
 
