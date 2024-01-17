@@ -1,6 +1,11 @@
+// use crate::binancetrades;
+use crate::models::*;
+use crate::schema::binancetrades;
+use crate::schema::*;
 use crate::utils::*;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use diesel::Insertable;
 use serde::{
     de::{self, Deserializer as deser, SeqAccess, Visitor},
     Deserialize, Deserializer, Serialize,
@@ -297,5 +302,45 @@ impl DeserializeExchangeStreams {
         }
 
         deserializer.deserialize_seq(StringArrayToF64ArrayVisitor)
+    }
+}
+pub trait ToDbModel {
+    type DbModel: Insertable<binancetrades::table>;
+
+    fn to_db_model(&self) -> Self::DbModel;
+}
+impl ToDbModel for BinanceTradesNewModel {
+    type DbModel = BinanceTradesNewModel;
+
+    fn to_db_model(&self) -> Self::DbModel {
+        BinanceTradesNewModel {
+            event_type: Some(self.event_type.clone().unwrap()),
+            event_time: Some(self.event_time).unwrap(),
+            symbol: Some(self.symbol.clone()).unwrap(),
+            aggegate_id: Some(self.aggegate_id).unwrap(),
+            price: Some(self.price).unwrap(),
+            quantity: Some(self.quantity).unwrap(),
+            first_trade_id: Some(self.first_trade_id).unwrap(),
+            last_trade_id: Some(self.last_trade_id).unwrap(),
+            trade_timestamp: Some(self.trade_timestamp).unwrap(),
+            is_buyer_mm: Some(self.is_buyer_mm).unwrap(),
+        }
+    }
+}
+impl ToTakerTrades for BinanceTradesNewModel {
+    fn to_trades_type(&self) -> Result<TakerTrades> {
+        let side = match self.is_buyer_mm.unwrap() {
+            true => Side::Sell,
+            false => Side::Buy,
+        };
+        Ok(TakerTrades {
+            symbol: self.symbol.clone().unwrap().to_string(),
+            side: side,
+            price: self.price.unwrap(),
+            qty: self.quantity.unwrap(),
+            local_ids: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+            exch_id: self.last_trade_id.unwrap(),
+            transaction_timestamp: self.trade_timestamp.unwrap(),
+        })
     }
 }

@@ -1,18 +1,74 @@
-use crate::types::*;
-use crate::utils::*;
+use crate::{
+    models::{BinanceTradesModel, BinanceTradesNewModel},
+    schema::{binancepartialbook::dsl::*, binancetrades, binancetrades::dsl::*},
+    types::*,
+    utils::*,
+};
 use actix::prelude::*;
 use anyhow::Result;
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
-use std::fmt;
-use std::fmt::{Debug, Display};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use diesel::{
+    insertable::CanInsertInSingleQuery,
+    pg::Pg,
+    pg::PgConnection,
+    prelude::*,
+    query_builder::QueryId,
+    r2d2::{ConnectionManager, Pool},
+};
+use std::{
+    cmp::Ordering,
+    collections::BinaryHeap,
+    fmt,
+    fmt::{Debug, Display},
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tracing::{event, info, instrument, Level};
 use tracing_subscriber::prelude::*;
+//
+// TODO: Fix the unnecessary clones tomorrow
+//
 
-// TODO: Fix the clones tomorrow
+//
+// TRADE STREAM -> Database Actor/Message handling
+//
 
+#[derive(Debug)]
+pub struct TradeStreamDBMessage<T>
+where
+    T: ToTakerTrades,
+{
+    pub data: T,
+}
+impl<T> Message for TradeStreamDBMessage<T>
+where
+    T: ToTakerTrades + 'static,
+{
+    type Result = Result<()>;
+}
+#[derive(Debug)]
+pub struct TradeStreamDBActor {
+    pub pool: Pool<ConnectionManager<PgConnection>>,
+}
+impl Actor for TradeStreamDBActor {
+    type Context = Context<Self>;
+}
+
+impl Handler<TradeStreamDBMessage<BinanceTradesNewModel>> for TradeStreamDBActor {
+    type Result = Result<()>;
+
+    fn handle(
+        &mut self,
+        msg: TradeStreamDBMessage<BinanceTradesNewModel>,
+        _ctx: &mut Context<Self>,
+    ) -> Result<()> {
+        let db_model = msg.data.to_db_model();
+        let mut conn = self.pool.get().expect("failed to connect to db pool");
+        let entry = diesel::insert_into(binancetrades::table)
+            .values(db_model)
+            .execute(&mut conn)?;
+        Ok(())
+    }
+}
 /// TradeStream from deserialized exchange specific type to generalized TakerTrades type
 #[derive(Debug)]
 pub struct TradeStreamMessage<T>

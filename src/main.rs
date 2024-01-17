@@ -6,6 +6,7 @@ mod ob_model;
 pub mod schema;
 pub mod types;
 mod utils;
+
 use crate::concurrency_setup::actix_actor_model::*;
 use diesel::prelude::*;
 use diesel::PgConnection;
@@ -19,13 +20,14 @@ use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*, registry::Registry}
 use crate::{
     client::{ws::*, ws_types::*},
     types::*,
+    utils::*,
 };
 use actix::prelude::*;
 use actix_rt::{task::spawn_blocking, Arbiter, System};
 use anyhow::Result;
 use concurrency_setup::*;
 use futures_util::{Stream, StreamExt};
-use models::BinanceTradesModel;
+use models::BinanceTradesNewModel;
 use serde_json::Value;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -42,24 +44,8 @@ async fn main() -> Result<()> {
     //     tracing_appender::rolling::minutely(".logs", "concurrency_model_testing.log");
     // let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
     // tracing_subscriber::fmt().with_writer(non_blocking).init();
-    let test = BinanceTradesModel {
-        id: 1,
-        event_type: Some("testing".to_string()),
-        event_time: Some(1234),
-        symbol: Some("TEST_BTC".to_string()),
-        aggegate_id: Some(1),
-        price: Some(46999.01),
-        quantity: Some(1.0),
-        first_trade_id: Some(2),
-        last_trade_id: Some(4),
-        trade_timestamp: Some(56789),
-        is_buyer_mm: Some(false),
-    };
-    let connection = &mut establish_connection;
-    let entry = diesel::insert_into(binancetrades)
-        .values(test)
-        .execute(&mut connection())?;
     // todo!();
+    let pool = create_db_pool();
     // let matching_engine_addr = MatchingEngineActor { data: 1 }.start();
     // let sequencer_addr = SequencerActor {
     //     queue: BinaryHeap::new(),
@@ -141,6 +127,26 @@ fn establish_connection() -> PgConnection {
 async fn _main() -> Result<()> {
     Ok(())
 }
+
+// DATABASE TESTING CODE
+// let test = BinanceTradesModel {
+//        id: 1,
+//        event_type: Some("testing".to_string()),
+//        event_time: Some(1234),
+//        symbol: Some("TEST_BTC".to_string()),
+//        aggegate_id: Some(1),
+//        price: Some(46999.01),
+//        quantity: Some(1.0),
+//        first_trade_id: Some(2),
+//        last_trade_id: Some(4),
+//        trade_timestamp: Some(56789),
+//        is_buyer_mm: Some(false),
+//    };
+//    let connection = &mut establish_connection;
+//    let entry = diesel::insert_into(binancetrades)
+//        .values(test)
+//        .execute(&mut connection())?;
+//
 
 // Tracing Flamegraph implementation for use in fn main
 // let fmt_layer: tracing_subscriber::fmt::Layer<Registry> = fmt::Layer::default();

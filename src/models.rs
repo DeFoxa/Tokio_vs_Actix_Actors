@@ -4,10 +4,25 @@ use diesel::Expression;
 use diesel::{Insertable, Queryable, Table};
 use serde_json::Value as JsonValue;
 
-#[derive(Queryable, Insertable, Debug)]
+#[derive(Queryable, Debug)]
 #[diesel(table_name = binancetrades)]
 pub struct BinanceTradesModel {
     pub id: i32,
+    pub event_type: Option<String>,
+    pub event_time: Option<i64>,
+    pub symbol: Option<String>,
+    pub aggegate_id: Option<i64>,
+    pub price: Option<f64>,
+    pub quantity: Option<f64>,
+    pub first_trade_id: Option<i64>,
+    pub last_trade_id: Option<i64>,
+    pub trade_timestamp: Option<i64>,
+    pub is_buyer_mm: Option<bool>,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = binancetrades)]
+pub struct BinanceTradesNewModel {
     pub event_type: Option<String>,
     pub event_time: Option<i64>,
     pub symbol: Option<String>,

@@ -31,5 +31,5 @@ tracing-appender = "0.2.3"
 tracing-flame = "0.2.0"
 async-trait = "0.1.77"
 dotenvy = "0.15.7"
-diesel = { version = "2.1.4", features = ["postgres", "serde_json"] }
+diesel = { version = "2.1.4", features = ["postgres", "serde_json", "r2d2"] }
 

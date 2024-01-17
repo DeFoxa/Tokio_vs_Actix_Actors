@@ -1,13 +1,28 @@
 use crate::types::*;
 use anyhow::Result;
+use diesel::{
+    pg::PgConnection,
+    r2d2::{ConnectionManager, Pool},
+};
+use dotenvy::dotenv;
 use serde::{
     de::{self, Deserializer as deser, SeqAccess, Visitor},
     Deserialize, Deserializer, Serialize,
 };
 use serde_json::Value;
+use std::env;
 use std::fmt;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+
+pub fn create_db_pool() -> Pool<ConnectionManager<PgConnection>> {
+    dotenv().ok();
+    let url = env::var("DATABASE_URL").expect("DATAASE url must be set");
+    let manager = ConnectionManager::<PgConnection>::new(url);
+    Pool::builder()
+        .build(manager)
+        .expect("failed to create db pool")
+}
 
 pub struct DeserializeExchangeStreams;
 
