@@ -1,0 +1,523 @@
+--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version 16.1 (Homebrew)
+-- Dumped by pg_dump version 16.1
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- Name: diesel_manage_updated_at(regclass); Type: FUNCTION; Schema: public; Owner: mal
+--
+
+CREATE FUNCTION public.diesel_manage_updated_at(_tbl regclass) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    EXECUTE format('CREATE TRIGGER set_updated_at BEFORE UPDATE ON %s
+                    FOR EACH ROW EXECUTE PROCEDURE diesel_set_updated_at()', _tbl);
+END;
+$$;
+
+
+ALTER FUNCTION public.diesel_manage_updated_at(_tbl regclass) OWNER TO mal;
+
+--
+-- Name: diesel_set_updated_at(); Type: FUNCTION; Schema: public; Owner: mal
+--
+
+CREATE FUNCTION public.diesel_set_updated_at() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF (
+        NEW IS DISTINCT FROM OLD AND
+        NEW.updated_at IS NOT DISTINCT FROM OLD.updated_at
+    ) THEN
+        NEW.updated_at := current_timestamp;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.diesel_set_updated_at() OWNER TO mal;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: __diesel_schema_migrations; Type: TABLE; Schema: public; Owner: mal
+--
+
+CREATE TABLE public.__diesel_schema_migrations (
+    version character varying(50) NOT NULL,
+    run_on timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+
+ALTER TABLE public.__diesel_schema_migrations OWNER TO mal;
+
+--
+-- Name: binancepartialbook; Type: TABLE; Schema: public; Owner: mal
+--
+
+CREATE TABLE public.binancepartialbook (
+    id integer NOT NULL,
+    depth_update character varying(255),
+    event_timestamp bigint,
+    "timestamp" bigint,
+    symbol character varying(255),
+    first_update_id bigint,
+    final_update_id bigint,
+    final_update_id_last_stream bigint,
+    bids jsonb,
+    asks jsonb
+);
+
+
+ALTER TABLE public.binancepartialbook OWNER TO mal;
+
+--
+-- Name: binancepartialbook_id_seq; Type: SEQUENCE; Schema: public; Owner: mal
+--
+
+CREATE SEQUENCE public.binancepartialbook_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.binancepartialbook_id_seq OWNER TO mal;
+
+--
+-- Name: binancepartialbook_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: mal
+--
+
+ALTER SEQUENCE public.binancepartialbook_id_seq OWNED BY public.binancepartialbook.id;
+
+
+--
+-- Name: binancetrades; Type: TABLE; Schema: public; Owner: mal
+--
+
+CREATE TABLE public.binancetrades (
+    id integer NOT NULL,
+    event_type character varying(255),
+    event_time bigint,
+    symbol character varying(255),
+    aggegate_id bigint,
+    price double precision,
+    quantity double precision,
+    first_trade_id bigint,
+    last_trade_id bigint,
+    trade_timestamp bigint,
+    is_buyer_mm boolean
+);
+
+
+ALTER TABLE public.binancetrades OWNER TO mal;
+
+--
+-- Name: binancetrades_id_seq; Type: SEQUENCE; Schema: public; Owner: mal
+--
+
+CREATE SEQUENCE public.binancetrades_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.binancetrades_id_seq OWNER TO mal;
+
+--
+-- Name: binancetrades_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: mal
+--
+
+ALTER SEQUENCE public.binancetrades_id_seq OWNED BY public.binancetrades.id;
+
+
+--
+-- Name: bookmodel; Type: TABLE; Schema: public; Owner: mal
+--
+
+CREATE TABLE public.bookmodel (
+    id integer NOT NULL,
+    symbol character varying(255),
+    "timestamp" bigint
+);
+
+
+ALTER TABLE public.bookmodel OWNER TO mal;
+
+--
+-- Name: bookmodel_id_seq; Type: SEQUENCE; Schema: public; Owner: mal
+--
+
+CREATE SEQUENCE public.bookmodel_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.bookmodel_id_seq OWNER TO mal;
+
+--
+-- Name: bookmodel_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: mal
+--
+
+ALTER SEQUENCE public.bookmodel_id_seq OWNED BY public.bookmodel.id;
+
+
+--
+-- Name: bookstate; Type: TABLE; Schema: public; Owner: mal
+--
+
+CREATE TABLE public.bookstate (
+    id integer NOT NULL,
+    "timestamp" timestamp with time zone,
+    mid double precision,
+    bb_level double precision,
+    bo_level double precision,
+    bb_quantity double precision,
+    bo_quantity double precision,
+    bid_depth double precision,
+    ask_depth double precision,
+    spread double precision,
+    slippage_per_tick double precision
+);
+
+
+ALTER TABLE public.bookstate OWNER TO mal;
+
+--
+-- Name: bookstate_id_seq; Type: SEQUENCE; Schema: public; Owner: mal
+--
+
+CREATE SEQUENCE public.bookstate_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.bookstate_id_seq OWNER TO mal;
+
+--
+-- Name: bookstate_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: mal
+--
+
+ALTER SEQUENCE public.bookstate_id_seq OWNED BY public.bookstate.id;
+
+
+--
+-- Name: quotes; Type: TABLE; Schema: public; Owner: mal
+--
+
+CREATE TABLE public.quotes (
+    id integer NOT NULL,
+    levels double precision,
+    qtys double precision,
+    count integer,
+    book_model_id integer
+);
+
+
+ALTER TABLE public.quotes OWNER TO mal;
+
+--
+-- Name: quotes_id_seq; Type: SEQUENCE; Schema: public; Owner: mal
+--
+
+CREATE SEQUENCE public.quotes_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.quotes_id_seq OWNER TO mal;
+
+--
+-- Name: quotes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: mal
+--
+
+ALTER SEQUENCE public.quotes_id_seq OWNED BY public.quotes.id;
+
+
+--
+-- Name: takertrades; Type: TABLE; Schema: public; Owner: mal
+--
+
+CREATE TABLE public.takertrades (
+    id integer NOT NULL,
+    symbol character varying(255),
+    side character varying(10),
+    price double precision,
+    qty double precision,
+    local_ids integer,
+    exch_id bigint,
+    transaction_timestamp bigint
+);
+
+
+ALTER TABLE public.takertrades OWNER TO mal;
+
+--
+-- Name: takertrades_id_seq; Type: SEQUENCE; Schema: public; Owner: mal
+--
+
+CREATE SEQUENCE public.takertrades_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.takertrades_id_seq OWNER TO mal;
+
+--
+-- Name: takertrades_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: mal
+--
+
+ALTER SEQUENCE public.takertrades_id_seq OWNED BY public.takertrades.id;
+
+
+--
+-- Name: binancepartialbook id; Type: DEFAULT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.binancepartialbook ALTER COLUMN id SET DEFAULT nextval('public.binancepartialbook_id_seq'::regclass);
+
+
+--
+-- Name: binancetrades id; Type: DEFAULT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.binancetrades ALTER COLUMN id SET DEFAULT nextval('public.binancetrades_id_seq'::regclass);
+
+
+--
+-- Name: bookmodel id; Type: DEFAULT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.bookmodel ALTER COLUMN id SET DEFAULT nextval('public.bookmodel_id_seq'::regclass);
+
+
+--
+-- Name: bookstate id; Type: DEFAULT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.bookstate ALTER COLUMN id SET DEFAULT nextval('public.bookstate_id_seq'::regclass);
+
+
+--
+-- Name: quotes id; Type: DEFAULT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.quotes ALTER COLUMN id SET DEFAULT nextval('public.quotes_id_seq'::regclass);
+
+
+--
+-- Name: takertrades id; Type: DEFAULT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.takertrades ALTER COLUMN id SET DEFAULT nextval('public.takertrades_id_seq'::regclass);
+
+
+--
+-- Data for Name: __diesel_schema_migrations; Type: TABLE DATA; Schema: public; Owner: mal
+--
+
+COPY public.__diesel_schema_migrations (version, run_on) FROM stdin;
+00000000000000	2024-01-16 18:09:28.738321
+20240116181949	2024-01-16 18:21:06.717874
+20240116184136	2024-01-16 18:42:31.654918
+20240116184513	2024-01-16 19:04:06.208096
+\.
+
+
+--
+-- Data for Name: binancepartialbook; Type: TABLE DATA; Schema: public; Owner: mal
+--
+
+COPY public.binancepartialbook (id, depth_update, event_timestamp, "timestamp", symbol, first_update_id, final_update_id, final_update_id_last_stream, bids, asks) FROM stdin;
+\.
+
+
+--
+-- Data for Name: binancetrades; Type: TABLE DATA; Schema: public; Owner: mal
+--
+
+COPY public.binancetrades (id, event_type, event_time, symbol, aggegate_id, price, quantity, first_trade_id, last_trade_id, trade_timestamp, is_buyer_mm) FROM stdin;
+\.
+
+
+--
+-- Data for Name: bookmodel; Type: TABLE DATA; Schema: public; Owner: mal
+--
+
+COPY public.bookmodel (id, symbol, "timestamp") FROM stdin;
+\.
+
+
+--
+-- Data for Name: bookstate; Type: TABLE DATA; Schema: public; Owner: mal
+--
+
+COPY public.bookstate (id, "timestamp", mid, bb_level, bo_level, bb_quantity, bo_quantity, bid_depth, ask_depth, spread, slippage_per_tick) FROM stdin;
+\.
+
+
+--
+-- Data for Name: quotes; Type: TABLE DATA; Schema: public; Owner: mal
+--
+
+COPY public.quotes (id, levels, qtys, count, book_model_id) FROM stdin;
+\.
+
+
+--
+-- Data for Name: takertrades; Type: TABLE DATA; Schema: public; Owner: mal
+--
+
+COPY public.takertrades (id, symbol, side, price, qty, local_ids, exch_id, transaction_timestamp) FROM stdin;
+\.
+
+
+--
+-- Name: binancepartialbook_id_seq; Type: SEQUENCE SET; Schema: public; Owner: mal
+--
+
+SELECT pg_catalog.setval('public.binancepartialbook_id_seq', 1, false);
+
+
+--
+-- Name: binancetrades_id_seq; Type: SEQUENCE SET; Schema: public; Owner: mal
+--
+
+SELECT pg_catalog.setval('public.binancetrades_id_seq', 1, false);
+
+
+--
+-- Name: bookmodel_id_seq; Type: SEQUENCE SET; Schema: public; Owner: mal
+--
+
+SELECT pg_catalog.setval('public.bookmodel_id_seq', 1, false);
+
+
+--
+-- Name: bookstate_id_seq; Type: SEQUENCE SET; Schema: public; Owner: mal
+--
+
+SELECT pg_catalog.setval('public.bookstate_id_seq', 1, false);
+
+
+--
+-- Name: quotes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: mal
+--
+
+SELECT pg_catalog.setval('public.quotes_id_seq', 1, false);
+
+
+--
+-- Name: takertrades_id_seq; Type: SEQUENCE SET; Schema: public; Owner: mal
+--
+
+SELECT pg_catalog.setval('public.takertrades_id_seq', 1, false);
+
+
+--
+-- Name: __diesel_schema_migrations __diesel_schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.__diesel_schema_migrations
+    ADD CONSTRAINT __diesel_schema_migrations_pkey PRIMARY KEY (version);
+
+
+--
+-- Name: binancepartialbook binancepartialbook_pkey; Type: CONSTRAINT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.binancepartialbook
+    ADD CONSTRAINT binancepartialbook_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: binancetrades binancetrades_pkey; Type: CONSTRAINT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.binancetrades
+    ADD CONSTRAINT binancetrades_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: bookmodel bookmodel_pkey; Type: CONSTRAINT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.bookmodel
+    ADD CONSTRAINT bookmodel_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: bookstate bookstate_pkey; Type: CONSTRAINT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.bookstate
+    ADD CONSTRAINT bookstate_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: quotes quotes_pkey; Type: CONSTRAINT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.quotes
+    ADD CONSTRAINT quotes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: takertrades takertrades_pkey; Type: CONSTRAINT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.takertrades
+    ADD CONSTRAINT takertrades_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: quotes quotes_book_model_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: mal
+--
+
+ALTER TABLE ONLY public.quotes
+    ADD CONSTRAINT quotes_book_model_id_fkey FOREIGN KEY (book_model_id) REFERENCES public.bookmodel(id);
+
+
+--
+-- PostgreSQL database dump complete
+--
+

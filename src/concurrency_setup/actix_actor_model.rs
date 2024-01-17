@@ -184,6 +184,7 @@ impl Handler<SequencerMessage> for SequencerActor {
         self.queue.push(msg.clone());
     }
 }
+
 #[derive(Debug, Clone)]
 pub enum SequencerMessage {
     TakerTrade(TakerTrades),
