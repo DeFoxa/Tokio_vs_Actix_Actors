@@ -1,14 +1,11 @@
 use crate::types::*;
 use crate::utils::*;
 use anyhow::Result;
-use async_trait::async_trait;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::VecDeque;
-use std::fmt;
 use std::fmt::{Debug, Display};
-use std::marker::PhantomData;
-use std::sync::Arc;
+// use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{event, info, instrument, Level};
@@ -79,7 +76,10 @@ async fn run_actor<T: ToTakerTrades + Send + Sync>(mut actor: TradeStreamActor<T
     }
     Ok(())
 }
+
+//
 // SEQUENCER
+//
 
 #[derive(Debug)]
 pub struct SequencerActor {
@@ -142,8 +142,10 @@ impl SequencerMessage {
     }
 }
 
+//
 // MATCHING ENGINE
 //
+
 #[derive(Debug, Clone)]
 pub struct MatchingEngineActor<S>
 where
@@ -156,7 +158,9 @@ pub enum MatchingEngineMessage {
     BookModelUpdate,
 }
 
-// QUEUED MESSAGE TYPES FOR SEQUENCER
+//
+// QUEUED MESSAGE TYPES FOR SEQUENCER - Old Code
+//
 // #[derive(Debug, PartialEq, Eq)]
 // pub struct SequencerMessageWrapper {
 //     pub message: SequencerMessage,
@@ -178,80 +182,5 @@ pub enum MatchingEngineMessage {
 // impl PartialOrd for QueuedMessages {
 //     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
 //         Some(self.cmp(other))
-//     }
-// }
-
-// #[async_trait]
-// trait ActorHandle {
-//     async fn new(&self) -> Self;
-//     async fn get_unique_id(&self) -> Self;
-// }
-
-// #[async_trait]
-// impl<T: ToTakerTrades + Send + 'static> ActorHandle for TradeStreamActor<T> {
-//     async fn new(&self) -> Self {
-//         todo!();
-//     }
-//     async fn get_unique_id(&self) -> Self {
-//         todo!();
-//     }
-// }
-//
-
-//
-//
-// #[async_trait]
-// impl<T: ToTakerTrades + Send + Sync>
-//     Handler<SequencerMessage, TradeStreamMessage<T>, SequencerMessage>
-//     for TradeStreamActorHandler<T>
-// {
-//     async fn new(sequencer_sender: mpsc::Sender<SequencerMessage>) -> Self {
-//         let (sender, receiver) = mpsc::channel(32);
-//         let actor: TradeStreamActor<BinanceTrades> =
-//             TradeStreamActor::new(receiver, sequencer_sender);
-//         tokio::spawn(run_actor(actor));
-//         Self {
-//             sender: sequencer_sender,
-//             _marker: PhantomData,
-//         }
-//     }
-//     async fn handle_message(&mut self, msg: TradeStreamMessage<T>) -> Result<()> {
-//         let tt = msg.data.to_trades_type()?;
-//         self.sender.send(SequencerMessage::TakerTrade(tt.clone()));
-//
-//         tracing::info!("test 2 ");
-//
-//         // println!("data {}", tt);
-//         Ok(())
-//     }
-//
-//     async fn send(&self, msg: SequencerMessage) -> Result<()> {
-//         self.sender.send(msg).await;
-//         Ok(())
-//
-//         // Ok(())
-//     }
-//     // fn receiver(&self) -> &mpsc::Receiver<TradeStreamMessage<T>> {
-//     //     &self.receiver
-//     // }
-// }
-//
-//
-//
-// #[async_trait]
-// trait Handler<S, T, G> {
-//     async fn new(sender: mpsc::Sender<S>) -> Self;
-//     async fn handle_message(&mut self, msg: T) -> Result<()>;
-//     async fn send(&self, msg: G) -> Result<()>;
-//     // fn get_receiver(&self) -> &mpsc::Reciever<T>;
-// }
-// #[async_trait]
-// trait Actor<T, G> {
-//     async fn new(receiver: mpsc::Receiver<T>, sender: mpsc::Sender<G>) -> Self;
-// }
-// TRADE STREAM
-// impl<T: ToTakerTrades + Send + Sync + 'static> Actor<T, G> for TradeStreamActor<T> {
-//     async fn new(receiver: mpsc::Receiver<T>, sender: mpsc::Sender<G>) -> Self {
-//         Self { receiver, sender }
 //     }
 // }
