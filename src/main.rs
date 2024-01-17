@@ -1,12 +1,18 @@
 #![allow(warnings)]
 mod client;
 mod concurrency_setup;
+pub mod models;
 mod ob_model;
-mod types;
+pub mod schema;
+pub mod types;
 mod utils;
-
 use crate::concurrency_setup::actix_actor_model::*;
+use diesel::prelude::*;
+use diesel::PgConnection;
+use dotenvy::dotenv;
+use schema::binancetrades::dsl::*;
 use std::collections::BinaryHeap;
+use std::env;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*, registry::Registry};
 
@@ -19,6 +25,7 @@ use actix_rt::{task::spawn_blocking, Arbiter, System};
 use anyhow::Result;
 use concurrency_setup::*;
 use futures_util::{Stream, StreamExt};
+use models::BinanceTradesModel;
 use serde_json::Value;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -31,31 +38,48 @@ pub const MAINNET: &str = "wss://fstream.binance.com";
 
 #[actix_rt::main]
 async fn main() -> Result<()> {
-    let file_appender =
-        tracing_appender::rolling::minutely(".logs", "concurrency_model_testing.log");
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-    tracing_subscriber::fmt().with_writer(non_blocking).init();
-
-    let matching_engine_addr = MatchingEngineActor { data: 1 }.start();
-    let sequencer_addr = SequencerActor {
-        queue: BinaryHeap::new(),
-        matching_engine_addr,
-        last_ob_update: Instant::now(),
-        is_processing_paused: false,
-    }
-    .start();
-
-    let trade_addr = TradeStreamActor {
-        //NOTE: don't want to use refs/lifetimes on actors. Therefore, clone
-        sequencer_addr: sequencer_addr.clone(),
-    }
-    .start();
-
-    let book_addr = BookModelStreamActor {
-        //NOTE: don't want to use refs/lifetimes on actors. Therefore, clone
-        sequencer_addr: sequencer_addr.clone(),
-    }
-    .start();
+    // let file_appender =
+    //     tracing_appender::rolling::minutely(".logs", "concurrency_model_testing.log");
+    // let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    // tracing_subscriber::fmt().with_writer(non_blocking).init();
+    let test = BinanceTradesModel {
+        id: 1,
+        event_type: Some("testing".to_string()),
+        event_time: Some(1234),
+        symbol: Some("TEST_BTC".to_string()),
+        aggegate_id: Some(1),
+        price: Some(46999.01),
+        quantity: Some(1.0),
+        first_trade_id: Some(2),
+        last_trade_id: Some(4),
+        trade_timestamp: Some(56789),
+        is_buyer_mm: Some(false),
+    };
+    let connection = &mut establish_connection;
+    let entry = diesel::insert_into(binancetrades)
+        .values(test)
+        .execute(&mut connection())?;
+    // todo!();
+    // let matching_engine_addr = MatchingEngineActor { data: 1 }.start();
+    // let sequencer_addr = SequencerActor {
+    //     queue: BinaryHeap::new(),
+    //     matching_engine_addr,
+    //     last_ob_update: Instant::now(),
+    //     is_processing_paused: false,
+    // }
+    // .start();
+    //
+    // let trade_addr = TradeStreamActor {
+    //     //NOTE: don't want to use refs/lifetimes on actors. Therefore, clone
+    //     sequencer_addr: sequencer_addr.clone(),
+    // }
+    // .start();
+    //
+    // let book_addr = BookModelStreamActor {
+    //     //NOTE: don't want to use refs/lifetimes on actors. Therefore, clone
+    //     sequencer_addr: sequencer_addr.clone(),
+    // }
+    // .start();
     //
     // let (mut ws_state, Response) = Client::connect_combined_async(
     //     MAINNET,
@@ -103,6 +127,14 @@ async fn main() -> Result<()> {
     // })
     // .await;
     Ok(())
+}
+
+fn establish_connection() -> PgConnection {
+    dotenv().ok();
+
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not found, must be set");
+    PgConnection::establish(&database_url)
+        .unwrap_or_else(|_| panic!("error connecting to DB: {}", database_url))
 }
 
 #[tokio::main]

@@ -5,7 +5,6 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
-// use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 use tracing::{event, info, instrument, Level};
@@ -60,6 +59,7 @@ impl<T: ToTakerTrades + Send + Sync + 'static> TradeStreamActorHandler<T> {
         tokio::spawn(async move {
             run_actor(actor.await);
         });
+
         Self { sender }
     }
     pub async fn send(
