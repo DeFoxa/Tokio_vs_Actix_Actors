@@ -35,10 +35,24 @@ pub struct BinanceTradesNewModel {
     pub is_buyer_mm: Option<bool>,
 }
 
-#[derive(Queryable, Insertable, Debug)]
+#[derive(Queryable, Debug)]
 #[diesel(table_name = binancepartialbook)]
 pub struct BinancePartialBookModel {
     pub id: i32,
+    pub depth_update: Option<String>,
+    pub event_timestamp: Option<i64>,
+    pub timestamp: Option<i64>,
+    pub symbol: Option<String>,
+    pub first_update_id: Option<i64>,
+    pub final_update_id: Option<i64>,
+    pub final_update_id_last_stream: Option<i64>,
+    pub bids: Option<JsonValue>,
+    pub asks: Option<JsonValue>,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = binancepartialbook)]
+pub struct BinancePartialBookModelInsertable {
     pub depth_update: Option<String>,
     pub event_timestamp: Option<i64>,
     pub timestamp: Option<i64>,

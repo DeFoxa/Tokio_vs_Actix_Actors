@@ -1,7 +1,7 @@
 // use crate::binancetrades;
 use crate::models::*;
-use crate::schema::binancetrades;
-use crate::schema::*;
+// use crate::schema::*;
+use crate::schema::{binancepartialbook, binancetrades};
 use crate::utils::*;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -309,6 +309,10 @@ pub trait ToDbModel {
 
     fn to_db_model(&self) -> Self::DbModel;
 }
+pub trait ToDBBookModel {
+    type DbModel: Insertable<binancepartialbook::table>;
+    fn to_db_model(&self) -> Self::DbModel;
+}
 impl ToDbModel for BinanceTradesNewModel {
     type DbModel = BinanceTradesNewModel;
 
@@ -359,6 +363,49 @@ impl ToDbModel for BinanceTrades {
             last_trade_id: Some(self.last_trade_id),
             trade_timestamp: Some(self.trade_timestamp),
             is_buyer_mm: Some(self.is_buyer_mm),
+        }
+    }
+}
+impl ToBookModels for BinancePartialBookModelInsertable {
+    fn to_bookstate(&self) -> Result<BookState> {
+        todo!();
+    }
+
+    fn to_book_model(&self) -> Result<BookModel> {
+        todo!();
+    }
+}
+impl ToDBBookModel for BinancePartialBook {
+    type DbModel = BinancePartialBookModelInsertable;
+
+    fn to_db_model(&self) -> Self::DbModel {
+        BinancePartialBookModelInsertable {
+            depth_update: Some(self.depth_update.clone()),
+            event_timestamp: Some(self.event_timestamp),
+            timestamp: Some(self.timestamp),
+            symbol: Some(self.symbol.clone()),
+            first_update_id: Some(self.first_update_id),
+            final_update_id: Some(self.final_update_id),
+            final_update_id_last_stream: Some(self.final_update_id_last_stream),
+            bids: self.bids.clone(),
+            asks: Some(self.asks.clone()),
+        }
+    }
+}
+impl ToDBBookModel for BinancePartialBookModelInsertable {
+    type DbModel = BinancePartialBookModelInsertable;
+
+    fn to_db_model(&self) -> Self::DbModel {
+        BinancePartialBookModelInsertable {
+            depth_update: self.depth_update.clone(),
+            event_timestamp: self.event_timestamp,
+            timestamp: self.timestamp,
+            symbol: self.symbol.clone(),
+            first_update_id: self.first_update_id,
+            final_update_id: self.final_update_id,
+            final_update_id_last_stream: self.final_update_id_last_stream,
+            bids: self.bids.clone(),
+            asks: self.asks.clone(),
         }
     }
 }

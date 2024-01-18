@@ -1,6 +1,8 @@
 use crate::{
-    models::{BinanceTradesModel, BinanceTradesNewModel},
-    schema::{binancepartialbook::dsl::*, binancetrades, binancetrades::dsl::*},
+    models::{BinancePartialBookModelInsertable, BinanceTradesModel, BinanceTradesNewModel},
+    schema::{
+        binancepartialbook, binancepartialbook::dsl::*, binancetrades, binancetrades::dsl::*,
+    },
     types::*,
     utils::*,
 };
@@ -69,6 +71,42 @@ impl Handler<TradeStreamDBMessage<BinanceTradesNewModel>> for TradeStreamDBActor
         Ok(())
     }
 }
+#[derive(Debug)]
+pub struct BookModelDbMessage<T>
+where
+    T: ToBookModels,
+{
+    pub data: T,
+}
+impl<T> Message for BookModelDbMessage<T>
+where
+    T: ToBookModels + 'static,
+{
+    type Result = Result<()>;
+}
+#[derive(Debug)]
+pub struct BookModelDbActor {
+    pub pool: Pool<ConnectionManager<PgConnection>>,
+}
+impl Actor for BookModelDbActor {
+    type Context = Context<Self>;
+}
+impl Handler<BookModelDbMessage<BinancePartialBookModelInsertable>> for BookModelDbActor {
+    type Result = Result<()>;
+    fn handle(
+        &mut self,
+        msg: BookModelDbMessage<BinancePartialBookModelInsertable>,
+        _ctx: &mut Context<Self>,
+    ) -> Self::Result {
+        let db_model = msg.data.to_db_model();
+        let mut conn = self.pool.get().expect("failed to connect to db pool");
+        let entry = diesel::insert_into(binancepartialbook::table)
+            .values(db_model)
+            .execute(&mut conn)?;
+        Ok(())
+    }
+}
+
 /// TradeStream from deserialized exchange specific type to generalized TakerTrades type
 #[derive(Debug)]
 pub struct TradeStreamMessage<T>
