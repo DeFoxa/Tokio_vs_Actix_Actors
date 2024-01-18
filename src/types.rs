@@ -387,8 +387,8 @@ impl ToDBBookModel for BinancePartialBook {
             first_update_id: Some(self.first_update_id),
             final_update_id: Some(self.final_update_id),
             final_update_id_last_stream: Some(self.final_update_id_last_stream),
-            bids: self.bids.clone(),
-            asks: Some(self.asks.clone()),
+            bids: serde_json::to_value(&self.bids).ok(),
+            asks: serde_json::to_value(&self.asks).ok(),
         }
     }
 }
@@ -404,8 +404,8 @@ impl ToDBBookModel for BinancePartialBookModelInsertable {
             first_update_id: self.first_update_id,
             final_update_id: self.final_update_id,
             final_update_id_last_stream: self.final_update_id_last_stream,
-            bids: self.bids.clone(),
-            asks: self.asks.clone(),
+            bids: serde_json::to_value(&self.bids).ok(),
+            asks: serde_json::to_value(&self.asks).ok(),
         }
     }
 }

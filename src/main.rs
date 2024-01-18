@@ -68,15 +68,15 @@ async fn main() -> Result<()> {
     //     sequencer_addr: sequencer_addr.clone(),
     // }
     // .start();
-    //
-    // let (mut ws_state, Response) = Client::connect_combined_async(
-    //     MAINNET,
-    //     vec![
-    //         &StreamNameGenerator::combined_stream_partial_book("ethusdt", "10").await,
-    //         &StreamNameGenerator::combined_stream_trades_by_symbol("ethusdt").await,
-    //     ],
-    // )
-    // .await?;
+
+    let (mut ws_state, Response) = Client::connect_combined_async(
+        MAINNET,
+        vec![
+            &StreamNameGenerator::combined_stream_partial_book("ethusdt", "10").await,
+            &StreamNameGenerator::combined_stream_trades_by_symbol("ethusdt").await,
+        ],
+    )
+    .await?;
     //
     // single ws connection
     // let (mut ws_state, Response) =
@@ -99,9 +99,9 @@ async fn main() -> Result<()> {
     //
     // //combined ws connection (aggTrade and depthUpdate)
     //
-    let (mut ws_state, Response) =
-        Client::connect_with_stream_name(&StreamNameGenerator::trades_by_symbol("btcusdt").await)
-            .await?;
+    // let (mut ws_state, Response) =
+    //     Client::connect_with_stream_name(&StreamNameGenerator::trades_by_symbol("btcusdt").await)
+    //         .await?;
 
     let (write, read) = ws_state.socket.split();
     read.for_each(|message| async {
@@ -117,7 +117,7 @@ async fn main() -> Result<()> {
                         db_actor.do_send(TradeStreamDBMessage {
                             data: trades.to_db_model(),
                         });
-                        // println!("{:?}", trades);
+                        // println!("{:?}", &trades);
                     }
                     Some("depthUpdate") => {
                         let book = serde_json::from_value::<BinancePartialBook>(value.clone())
@@ -125,7 +125,7 @@ async fn main() -> Result<()> {
                         book_db_actor.do_send(BookModelDbMessage {
                             data: book.to_db_model(),
                         });
-                        // println!("{:?}", book);
+                        // println!("{:?}", &book);
                     }
                     _ => {
                         eprintln!("Error matching deserialized fields, no aggTrade or depthUpdate");
