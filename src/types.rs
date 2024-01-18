@@ -344,3 +344,21 @@ impl ToTakerTrades for BinanceTradesNewModel {
         })
     }
 }
+impl ToDbModel for BinanceTrades {
+    type DbModel = BinanceTradesNewModel;
+
+    fn to_db_model(&self) -> Self::DbModel {
+        BinanceTradesNewModel {
+            event_type: Some(self.event_type.clone()),
+            event_time: Some(self.event_time),
+            symbol: Some(self.symbol.clone()),
+            aggegate_id: Some(self.aggegate_id),
+            price: Some(self.price),
+            quantity: Some(self.quantity),
+            first_trade_id: Some(self.first_trade_id),
+            last_trade_id: Some(self.last_trade_id),
+            trade_timestamp: Some(self.trade_timestamp),
+            is_buyer_mm: Some(self.is_buyer_mm),
+        }
+    }
+}

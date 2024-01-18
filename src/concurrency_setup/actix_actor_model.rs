@@ -60,7 +60,7 @@ impl Handler<TradeStreamDBMessage<BinanceTradesNewModel>> for TradeStreamDBActor
         &mut self,
         msg: TradeStreamDBMessage<BinanceTradesNewModel>,
         _ctx: &mut Context<Self>,
-    ) -> Result<()> {
+    ) -> Self::Result {
         let db_model = msg.data.to_db_model();
         let mut conn = self.pool.get().expect("failed to connect to db pool");
         let entry = diesel::insert_into(binancetrades::table)
@@ -127,15 +127,6 @@ where
 {
     pub data: T,
 }
-//
-// impl<T> fmt::Display for BookModelStreamMessage<T>
-// where
-//     T: ToTakerTrades + Display,
-// {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         write!(f, "message: {}", self.data)
-//     }
-// }
 
 impl<T> Message for BookModelStreamMessage<T>
 where

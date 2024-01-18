@@ -46,6 +46,7 @@ async fn main() -> Result<()> {
     // tracing_subscriber::fmt().with_writer(non_blocking).init();
     // todo!();
     let pool = create_db_pool();
+    let db_actor = TradeStreamDBActor { pool: pool }.start();
     // let matching_engine_addr = MatchingEngineActor { data: 1 }.start();
     // let sequencer_addr = SequencerActor {
     //     queue: BinaryHeap::new(),
@@ -77,12 +78,30 @@ async fn main() -> Result<()> {
     // .await?;
     //
     // single ws connection
-    // let (mut ws_state, Response) =
-    //     Client::connect_with_stream_name(&StreamNameGenerator::trades_by_symbol("btcusdt").await)
-    //         .await?;
+    let (mut ws_state, Response) =
+        Client::connect_with_stream_name(&StreamNameGenerator::trades_by_symbol("btcusdt").await)
+            .await?;
+    let (write, read) = ws_state.socket.split();
+    read.for_each(|message| async {
+        match message {
+            Ok(Message::Text(text)) => {
+                let value: Value = serde_json::from_str(&text).expect("some error 1");
+                let trades: BinanceTrades = serde_json::from_value(value).expect("some error 2");
+                db_actor.do_send(TradeStreamDBMessage {
+                    data: trades.to_db_model(),
+                });
+            }
+            _ => (),
+        }
+    })
+    .await;
 
     //combined ws connection (aggTrade and depthUpdate)
     //
+    //    let (mut ws_state, Response) =
+    // Client::connect_with_stream_name(&StreamNameGenerator::trades_by_symbol("btcusdt").await)
+    //     .await?;
+
     // let (write, read) = ws_state.socket.split();
     // read.for_each(|message| async {
     //     match message {
