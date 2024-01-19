@@ -57,11 +57,12 @@ impl<T: ToTakerTrades + Send + Sync + 'static> TradeStreamActorHandler<T> {
         let (sender, receiver) = mpsc::channel(32);
         let actor = TradeStreamActor::new(receiver, sequencer_sender);
         tokio::spawn(async move {
-            run_actor(actor.await);
+            run_trade_actor(actor.await);
         });
 
         Self { sender }
     }
+
     pub async fn send(
         &self,
         msg: TradeStreamMessage<T>,
@@ -70,7 +71,9 @@ impl<T: ToTakerTrades + Send + Sync + 'static> TradeStreamActorHandler<T> {
     }
 }
 
-async fn run_actor<T: ToTakerTrades + Send + Sync>(mut actor: TradeStreamActor<T>) -> Result<()> {
+async fn run_trade_actor<T: ToTakerTrades + Send + Sync>(
+    mut actor: TradeStreamActor<T>,
+) -> Result<()> {
     while let Some(message) = actor.receiver.recv().await {
         let send_message = actor.handle_message(message).await?;
     }
@@ -80,6 +83,20 @@ async fn run_actor<T: ToTakerTrades + Send + Sync>(mut actor: TradeStreamActor<T
 //
 // SEQUENCER
 //
+// Sequencer Thread NOTE:
+//
+// The sequencer thread handles ordering of two message types(this may grow
+// as we incorporate other ob stream data), Trade Stream and OB update messages. The thread contain
+// three actors, the sequencer logic, statemanagement for the sequencer and a timer to handle state management.
+// OB updates determine orderbook state and update every 250ms, if the ob updates are late or cut
+// off for some reason, then the matching engine state is no longer accurate and the sequencer
+// thread must be paused. The state actor and timer actor look at incoming ob update messages and
+// time their arrival. If the arrival is late, in this case we are testing late as > 1000ms then
+// the system is paused (the 1000ms cutoff can be lowered later). When this happens the sequencer
+// state changes to paused = true and all incoming trade stream messages are rerouted to a queue,
+// where they are sorted by timestamp. When the new ob_update comes through than the associated
+// timestamp is logged and only the messages that are queued after the ob update timestamp are
+// sent to the matching engine  along with the ob_update
 
 #[derive(Debug)]
 pub struct SequencerActor {
@@ -91,7 +108,7 @@ pub struct SequencerActor {
 }
 
 impl SequencerActor {
-    fn new(
+    pub fn new(
         receiver: mpsc::Receiver<SequencerMessage>,
         matching_engine_actor: MatchingEngineActor<SequencerMessage>,
     ) -> Self {
@@ -102,6 +119,9 @@ impl SequencerActor {
             last_ob_update: Instant::now(),
             is_processing_paused: false,
         }
+    }
+    pub fn handle_message(&mut self, message: SequencerMessage) {
+        todo!();
     }
     pub fn enqueue_message(&mut self, message: SequencerMessage) {
         self.queue.push_back(message);

@@ -8,6 +8,10 @@ pub mod types;
 mod utils;
 
 use crate::concurrency_setup::actix_actor_model::*;
+use crate::concurrency_setup::tokio_actor_model::{
+    MatchingEngineActor as MEA, SequencerActor as SA, SequencerMessage as SM,
+    TradeStreamActor as TSA, TradeStreamMessage as TSM,
+};
 use diesel::prelude::*;
 use diesel::PgConnection;
 use dotenvy::dotenv;
@@ -29,24 +33,27 @@ use concurrency_setup::*;
 use futures_util::{Stream, StreamExt};
 use models::BinanceTradesNewModel;
 use serde_json::Value;
-use std::sync::mpsc;
+// use std::sync::mpsc;
 use std::time::{Duration, Instant};
+use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::tungstenite::Message;
 use tracing_flame::FlameLayer;
-
 //TODO: Fix the clones in actor_model
 
 pub const MAINNET: &str = "wss://fstream.binance.com";
 
-#[actix_rt::main]
+// #[actix_rt::main]
+#[tokio::main]
 async fn main() -> Result<()> {
-    let file_appender =
-        tracing_appender::rolling::minutely(".logs", "concurrency_model_testing.log");
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-    tracing_subscriber::fmt().with_writer(non_blocking).init();
-
-    book_data_to_db().await?;
-    let matching_engine_flow = MatchingEngineActors::new().await;
+    // let file_appender =
+    //     tracing_appender::rolling::minutely(".logs", "concurrency_model_testing.log");
+    // let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    // tracing_subscriber::fmt().with_writer(non_blocking).init();
+    let matching = MEA::new(SequencerMessage::TakerTrade);
+    let (trade_sender, trade_receiver) = mpsc::channel(32);
+    let (seq_sender, seq_receiver) = mpsc::channel(32);
+    let seq_actor = SA::new(seq_receiver, matching);
+    tokio::spawn(async move { seq_actor.run().await });
 
     Ok(())
 }
@@ -213,6 +220,7 @@ async fn book_stream_connection() -> Result<()> {
             Ok(Message::Text(text)) => {
                 let value: Value = serde_json::from_str(&text).expect("some error 1");
                 let book: BinancePartialBook = serde_json::from_value(value).expect("some error 2");
+
                 //NOTE: Add message handling below or return trades as Result
                 // db_actor.do_send(TradeStreamDBMessage {
                 //     data: trades.to_db_model(),
