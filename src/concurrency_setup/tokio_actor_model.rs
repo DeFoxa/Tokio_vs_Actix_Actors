@@ -2,11 +2,11 @@ use crate::types::*;
 use crate::utils::*;
 use anyhow::Result;
 use std::cmp::Ordering;
-use std::collections::BinaryHeap;
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
+use tokio::time::{Duration as TD, Interval};
 use tracing::{event, info, instrument, Level};
 use tracing_subscriber::prelude::*;
 
@@ -101,6 +101,7 @@ async fn run_trade_actor<T: ToTakerTrades + Send + Sync>(
 #[derive(Debug)]
 pub struct SequencerActor {
     receiver: mpsc::Receiver<SequencerMessage>,
+    state_receiver: mpsc::Receiver<StateManagementMessage>,
     pub queue: VecDeque<SequencerMessage>,
     matching_engine_actor: MatchingEngineActor<SequencerMessage>,
     last_ob_update: Instant,
@@ -110,14 +111,46 @@ pub struct SequencerActor {
 impl SequencerActor {
     pub fn new(
         receiver: mpsc::Receiver<SequencerMessage>,
+        state_receiver: mpsc::Receiver<StateManagementMessage>,
         matching_engine_actor: MatchingEngineActor<SequencerMessage>,
     ) -> Self {
         SequencerActor {
             receiver,
+            state_receiver,
             queue: VecDeque::new(),
             matching_engine_actor,
             last_ob_update: Instant::now(),
             is_processing_paused: false,
+        }
+    }
+    pub async fn run(&mut self) {
+        loop {
+            tokio::select! {
+                Some(message) = self.receiver.recv() => {
+                    if self.is_processing_paused {
+                        self.queue.push_back(message);
+                    } else {
+                        self.process_queue(message).await;
+                    }
+                }
+                Some(state_message) = self.state_receiver.recv() =>  {
+                    match state_message {
+                        StateManagementMessage::Processing => {
+                            self.is_processing_paused = false;
+                        }
+                        StateManagementMessage::PauseProcessing => {
+                            self.is_processing_paused = true;
+                        }
+                        StateManagementMessage::ResumeProcessing => {
+                            self.is_processing_paused = false;
+                            while let Some(queued_message) = self.queue.pop_front() {
+                                self.process_queue(queued_message).await;
+                            }
+                        }
+                    }
+
+                }
+            }
         }
     }
     pub fn handle_message(&mut self, message: SequencerMessage) {
@@ -126,9 +159,11 @@ impl SequencerActor {
     pub fn enqueue_message(&mut self, message: SequencerMessage) {
         self.queue.push_back(message);
     }
-    pub async fn process_queue(&mut self, is_processing_paused: bool) {
+    pub async fn process_queue(&mut self, ob_update_timestamp: SequencerMessage) {
         while let Some(queued_message) = self.queue.pop_front() {
             todo!();
+            // add handling for sorting messages by ob_update timestamp. queued_values < timestamp
+            // = drop, queued_values > timestamp sent to matching engine
             break;
         }
     }
@@ -162,6 +197,49 @@ impl SequencerMessage {
     }
 }
 
+pub struct SequencerState {
+    receiver: mpsc::Receiver<StateManagementMessage>,
+    timer_sender: mpsc::Sender<()>,
+    is_processing_paused: bool,
+}
+#[derive(Debug)]
+pub enum StateManagementMessage {
+    Processing,
+    PauseProcessing,
+    ResumeProcessing,
+}
+
+pub struct TimerActor {
+    receiver: mpsc::Receiver<()>,
+    state_management_sender: mpsc::Sender<StateManagementMessage>,
+}
+impl TimerActor {
+    pub async fn start_timer(&self, mut receiver: mpsc::Receiver<SequencerMessage>) -> Result<()> {
+        let mut interval = tokio::time::interval(Duration::from_secs(1));
+
+        loop {
+            tokio::select! {
+                Some(msg) = receiver.recv() => {
+                    match msg {
+                        SequencerMessage::BookModelUpdate(ref book_model) => {
+                            interval.reset();
+                        }
+                        _ => log::debug!("Incorrect type being passed to timer"),
+                    }
+                }
+                _ = interval.tick() => {
+                    // Timer completed, send PauseProcessing message
+                    self.state_management_sender
+                        .send(StateManagementMessage::PauseProcessing)
+                        .await?;
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
 //
 // MATCHING ENGINE
 //

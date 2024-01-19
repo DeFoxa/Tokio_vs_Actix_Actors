@@ -49,11 +49,11 @@ async fn main() -> Result<()> {
     //     tracing_appender::rolling::minutely(".logs", "concurrency_model_testing.log");
     // let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
     // tracing_subscriber::fmt().with_writer(non_blocking).init();
-    let matching = MEA::new(SequencerMessage::TakerTrade);
-    let (trade_sender, trade_receiver) = mpsc::channel(32);
-    let (seq_sender, seq_receiver) = mpsc::channel(32);
-    let seq_actor = SA::new(seq_receiver, matching);
-    tokio::spawn(async move { seq_actor.run().await });
+    // let matching = MEA::new(SequencerMessage::TakerTrade);
+    // let (trade_sender, trade_receiver) = mpsc::channel(32);
+    // let (seq_sender, seq_receiver) = mpsc::channel(32);
+    // let seq_actor = SA::new(seq_receiver, matching);
+    // tokio::spawn(async move { seq_actor.run().await });
 
     Ok(())
 }
