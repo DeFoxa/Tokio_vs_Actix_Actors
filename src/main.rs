@@ -40,34 +40,38 @@ pub const MAINNET: &str = "wss://fstream.binance.com";
 
 #[actix_rt::main]
 async fn main() -> Result<()> {
-    // let file_appender =
-    //     tracing_appender::rolling::minutely(".logs", "concurrency_model_testing.log");
-    // let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-    // tracing_subscriber::fmt().with_writer(non_blocking).init();
-    // todo!();
+    let file_appender =
+        tracing_appender::rolling::minutely(".logs", "concurrency_model_testing.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    tracing_subscriber::fmt().with_writer(non_blocking).init();
+
+    book_data_to_db().await?;
+    let matching_engine_flow = MatchingEngineActors::new().await;
+
+    Ok(())
+}
+
+fn establish_connection() -> PgConnection {
+    dotenv().ok();
+
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not found, must be set");
+    PgConnection::establish(&database_url)
+        .unwrap_or_else(|_| panic!("error connecting to DB: {}", database_url))
+}
+
+// #[tokio::main]
+// async fn _main() -> Result<()> {
+//     Ok(())
+// }
+
+//
+//Combined connection book
+//
+
+async fn book_data_to_db() -> Result<()> {
     let pool = create_db_pool();
     let db_actor = TradeStreamDBActor { pool: pool.clone() }.start();
     let book_db_actor = BookModelDbActor { pool: pool }.start();
-    // let matching_engine_addr = MatchingEngineActor { data: 1 }.start();
-    // let sequencer_addr = SequencerActor {
-    //     queue: BinaryHeap::new(),
-    //     matching_engine_addr,
-    //     last_ob_update: Instant::now(),
-    //     is_processing_paused: false,
-    // }
-    // .start();
-    //
-    // let trade_addr = TradeStreamActor {
-    //     //NOTE: don't want to use refs/lifetimes on actors. Therefore, clone
-    //     sequencer_addr: sequencer_addr.clone(),
-    // }
-    // .start();
-    //
-    // let book_addr = BookModelStreamActor {
-    //     //NOTE: don't want to use refs/lifetimes on actors. Therefore, clone
-    //     sequencer_addr: sequencer_addr.clone(),
-    // }
-    // .start();
 
     let (mut ws_state, Response) = Client::connect_combined_async(
         MAINNET,
@@ -77,31 +81,6 @@ async fn main() -> Result<()> {
         ],
     )
     .await?;
-    //
-    // single ws connection
-    // let (mut ws_state, Response) =
-    //     Client::connect_with_stream_name(&StreamNameGenerator::trades_by_symbol("btcusdt").await)
-    //         .await?;
-    // let (write, read) = ws_state.socket.split();
-    // read.for_each(|message| async {
-    //     match message {
-    //         Ok(Message::Text(text)) => {
-    //             let value: Value = serde_json::from_str(&text).expect("some error 1");
-    //             let trades: BinanceTrades = serde_json::from_value(value).expect("some error 2");
-    //             db_actor.do_send(TradeStreamDBMessage {
-    //                 data: trades.to_db_model(),
-    //             });
-    //         }
-    //         _ => (),
-    //     }
-    // })
-    // .await;
-    //
-    // //combined ws connection (aggTrade and depthUpdate)
-    //
-    // let (mut ws_state, Response) =
-    //     Client::connect_with_stream_name(&StreamNameGenerator::trades_by_symbol("btcusdt").await)
-    //         .await?;
 
     let (write, read) = ws_state.socket.split();
     read.for_each(|message| async {
@@ -114,7 +93,7 @@ async fn main() -> Result<()> {
                         let trades = serde_json::from_value::<BinanceTrades>(value.clone())
                             .expect("error deserializing to binancetrades");
 
-                        db_actor.do_send(TradeStreamDBMessage {
+                        db_actor.try_send(TradeStreamDBMessage {
                             data: trades.to_db_model(),
                         });
                         // println!("{:?}", &trades);
@@ -122,7 +101,7 @@ async fn main() -> Result<()> {
                     Some("depthUpdate") => {
                         let book = serde_json::from_value::<BinancePartialBook>(value.clone())
                             .expect("error deserializing to PartialBook");
-                        book_db_actor.do_send(BookModelDbMessage {
+                        book_db_actor.try_send(BookModelDbMessage {
                             data: book.to_db_model(),
                         });
                         // println!("{:?}", &book);
@@ -139,19 +118,122 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn establish_connection() -> PgConnection {
-    dotenv().ok();
+//
+// COMBINED
+//
 
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not found, must be set");
-    PgConnection::establish(&database_url)
-        .unwrap_or_else(|_| panic!("error connecting to DB: {}", database_url))
-}
+async fn stream_data_to_matching_engine() -> Result<()> {
+    let matching_engine_addr = MatchingEngineActor { data: 1 }.start();
+    let seq_addr = SequencerActor {
+        queue: BinaryHeap::new(),
+        matching_engine_addr,
+        last_ob_update: Instant::now(),
+        is_processing_paused: false,
+    }
+    .start();
 
-#[tokio::main]
-async fn _main() -> Result<()> {
+    let trade_stream_actor = TradeStreamActor {
+        sequencer_addr: seq_addr.clone(),
+    }
+    .start();
+    let book_actor = BookModelStreamActor {
+        sequencer_addr: seq_addr,
+    }
+    .start();
+
+    let (mut ws_state, Response) = Client::connect_combined_async(
+        MAINNET,
+        vec![
+            &StreamNameGenerator::combined_stream_partial_book("ethusdt", "10").await,
+            &StreamNameGenerator::combined_stream_trades_by_symbol("ethusdt").await,
+        ],
+    )
+    .await?;
+
+    let (write, read) = ws_state.socket.split();
+    read.for_each(|message| async {
+        match message {
+            Ok(Message::Text(text)) => {
+                let value: Value = serde_json::from_str(&text).expect("some error 1");
+                let other_event_type = value.get("e").and_then(Value::as_str);
+                match other_event_type {
+                    Some("aggTrade") => {
+                        let trades = serde_json::from_value::<BinanceTrades>(value.clone())
+                            .expect("error deserializing to binancetrades");
+
+                        trade_stream_actor.do_send(TradeStreamMessage { data: trades });
+                        // println!("{:?}", &trades);
+                    }
+                    Some("depthUpdate") => {
+                        let book = serde_json::from_value::<BinancePartialBook>(value.clone())
+                            .expect("error deserializing to PartialBook");
+                        book_actor.do_send(BookModelStreamMessage { data: book });
+                        // println!("{:?}", &book);
+                    }
+                    _ => {
+                        eprintln!("Error matching deserialized fields, no aggTrade or depthUpdate");
+                    }
+                }
+            }
+            _ => (),
+        }
+    })
+    .await;
     Ok(())
 }
-
+//single ws connection
+async fn trade_stream_connection() -> Result<()> {
+    let (mut ws_state, Response) =
+        Client::connect_with_stream_name(&StreamNameGenerator::trades_by_symbol("btcusdt").await)
+            .await?;
+    let (write, read) = ws_state.socket.split();
+    read.for_each(|message| async {
+        match message {
+            Ok(Message::Text(text)) => {
+                let value: Value = serde_json::from_str(&text).expect("some error 1");
+                let trades: BinanceTrades = serde_json::from_value(value).expect("some error 2");
+                //NOTE: Add message handling below or return trades as Result
+                // db_actor.do_send(TradeStreamDBMessage {
+                //     data: trades.to_db_model(),
+                // });
+            }
+            _ => (),
+        }
+    })
+    .await;
+    Ok(())
+}
+async fn book_stream_connection() -> Result<()> {
+    let (mut ws_state, Response) =
+        Client::connect_with_stream_name(&StreamNameGenerator::partial_book("ethusdt", "10").await)
+            .await?;
+    let (write, read) = ws_state.socket.split();
+    read.for_each(|message| async {
+        match message {
+            Ok(Message::Text(text)) => {
+                let value: Value = serde_json::from_str(&text).expect("some error 1");
+                let book: BinancePartialBook = serde_json::from_value(value).expect("some error 2");
+                //NOTE: Add message handling below or return trades as Result
+                // db_actor.do_send(TradeStreamDBMessage {
+                //     data: trades.to_db_model(),
+                // });
+            }
+            _ => (),
+        }
+    })
+    .await;
+    Ok(())
+}
+// async fn inst_sequence_addr() -> Result<SequenceActor> {
+//     let matching_engine_addr = MatchingEngineActor { data: 1 }.start();
+//      let sequencer_addr = SequencerActor {
+//         queue: BinaryHeap::new(),
+//         matching_engine_addr,
+//         last_ob_update: Instant::now(),
+//         is_processing_paused: false,
+//     }.start();
+//      Ok(sequence_addr)
+// }
 // DATABASE TESTING CODE
 // let test = BinanceTradesModel {
 //        id: 1,
