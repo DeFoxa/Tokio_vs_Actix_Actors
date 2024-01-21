@@ -405,6 +405,7 @@ impl ToDbModel for BinanceTrades {
         }
     }
 }
+
 impl ToBookModels for BinancePartialBookModelInsertable {
     fn to_bookstate(&self) -> Result<BookState> {
         todo!();

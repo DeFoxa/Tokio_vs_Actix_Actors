@@ -4,6 +4,7 @@ use anyhow::Result;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{Duration as TD, Interval};
@@ -128,7 +129,9 @@ impl SequencerActor {
     pub fn handle_message(&mut self, msg: SequencerMessage) {
         //NOTE: handle SequencerState = Processing
         let matching_engine_msg = match msg {
-            SequencerMessage::TakerTrade(trades) => MatchingEngineMessage::TakerTrade(trades),
+            SequencerMessage::TakerTrade(trades) => {
+                MatchingEngineMessage::TakerTrade(Arc::new(trades))
+            }
 
             SequencerMessage::BookModelUpdate(book_update) => {
                 MatchingEngineMessage::BookModelUpdate(book_update)
@@ -215,14 +218,28 @@ impl SequencerActor {
     }
 
     pub fn enqueue_message(&mut self, message: SequencerMessage) {
-        self.queue.push_back(message);
+        // self.queue.push_back(message);
+        todo!();
     }
+
     pub async fn process_queue(&mut self, ob_update_timestamp: SequencerMessage) {
-        while let Some(queued_message) = self.queue.pop_front() {
-            todo!();
-            // add handling for sorting messages by ob_update timestamp. queued_values < timestamp
-            // = drop, queued_values > timestamp sent to matching engine
-            break;
+        self.queue
+            .make_contiguous()
+            .sort_by(|a, b| a.transaction_timestamp.cmp(&b.transaction_timestamp));
+        let index = match self
+            .queue
+            .binary_search_by_key(&ob_update_timestamp.timestamp(), |message| {
+                message.transaction_timestamp
+            }) {
+            Ok(index) => index,
+            Err(index) => index,
+        };
+
+        for message in self.queue.drain(..index) {
+            let matching_engine_message = MatchingEngineMessage::TakerTrade(Arc::new(message));
+            self.matching_engine_actor
+                .send(matching_engine_message)
+                .await;
         }
     }
 }
@@ -321,7 +338,7 @@ where
     pub data: S,
 }
 pub enum MatchingEngineMessage {
-    TakerTrade(TakerTrades),
+    TakerTrade(Arc<TakerTrades>),
     BookModelUpdate(BookModel),
 }
 
