@@ -164,6 +164,7 @@ impl SequencerActor {
         //     }
         // }
     }
+
     pub async fn run(&mut self, message: SequencerMessage) {
         match self.sequencer_state {
             SequencerState::Processing => {
@@ -177,52 +178,23 @@ impl SequencerActor {
                 }
             },
             SequencerState::ResumeProcessing => {
+                self.process_queue(message);
                 log::info!(
                     "resume process from run, state should update from StateManagement, verify"
                 );
             }
         }
-        // loop {
-        //     tokio::select! {
-        //         Some(message) = self.receiver.recv() => {
-        //             match message {
-        //                 SequencerMessage::TakerTrade => {
-        //                     self.handle_message(message)
-        //                 }
-        //                 SequencerMessage::BookModelUpdate {
-        //                     log::info!("state_management will handle updated")
-        //                 }
-        //             }
-        //
-        //
-        //         }
-        //         Some(state_message) = self.state_receiver.recv() =>  {
-        //             match state_message {
-        //                 StateManagementMessage::Processing => {
-        //                     self.is_processing_paused = false;
-        //                 }
-        //                 StateManagementMessage::PauseProcessing => {
-        //                     self.is_processing_paused = true;
-        //                 }
-        //                 StateManagementMessage::ResumeProcessing => {
-        //                     self.is_processing_paused = false;
-        //                     while let Some(queued_message) = self.queue.pop_front() {
-        //                         self.process_queue(queued_message).await;
-        //                     }
-        //                 }
-        //             }
-        //
-        //         }
-        //     }
-        // }
     }
 
-    pub fn enqueue_message(&mut self, message: SequencerMessage) {
-        // self.queue.push_back(message);
-        todo!();
-    }
+    // pub fn enqueue_message(&mut self, message: SequencerMessage) {
+    // self.queue.push_back(message);
+    // todo!();
+    // }
 
     pub async fn process_queue(&mut self, ob_update_timestamp: SequencerMessage) {
+        // NOTE: this implementation assumes sequential ordering, by timestamp, of the data coming
+        // from the ws stream, must be verified that this is the common behavior of the stream.
+        // i.e. no common, (we can always handle rare cases later), errors in transaction timestamp sent through the stream.
         self.queue
             .make_contiguous()
             .sort_by(|a, b| a.transaction_timestamp.cmp(&b.transaction_timestamp));
@@ -341,6 +313,40 @@ pub enum MatchingEngineMessage {
     TakerTrade(Arc<TakerTrades>),
     BookModelUpdate(BookModel),
 }
+//OLD RUN
+// loop {
+//     tokio::select! {
+//         Some(message) = self.receiver.recv() => {
+//             match message {
+//                 SequencerMessage::TakerTrade => {
+//                     self.handle_message(message)
+//                 }
+//                 SequencerMessage::BookModelUpdate {
+//                     log::info!("state_management will handle updated")
+//                 }
+//             }
+//
+//
+//         }
+//         Some(state_message) = self.state_receiver.recv() =>  {
+//             match state_message {
+//                 StateManagementMessage::Processing => {
+//                     self.is_processing_paused = false;
+//                 }
+//                 StateManagementMessage::PauseProcessing => {
+//                     self.is_processing_paused = true;
+//                 }
+//                 StateManagementMessage::ResumeProcessing => {
+//                     self.is_processing_paused = false;
+//                     while let Some(queued_message) = self.queue.pop_front() {
+//                         self.process_queue(queued_message).await;
+//                     }
+//                 }
+//             }
+//
+//         }
+//     }
+// }
 
 //
 // QUEUED MESSAGE TYPES FOR SEQUENCER - Old Code
