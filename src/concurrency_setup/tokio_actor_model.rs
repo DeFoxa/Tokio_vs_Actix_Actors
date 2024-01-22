@@ -3,6 +3,7 @@ use crate::utils::*;
 use anyhow::Result;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
+use std::fmt;
 use std::fmt::{Debug, Display};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -169,12 +170,18 @@ impl SequencerActor {
         match self.sequencer_state {
             SequencerState::Processing => {
                 self.handle_message(message);
+                // not adding a log::info! message for standard processing for time being, only want
+                // to see non standard scenarios in logs
             }
             SequencerState::PauseProcessing => match message {
-                SequencerMessage::TakerTrade(message) => self.queue.push_back(message),
+                SequencerMessage::TakerTrade(message) => {
+                    self.queue.push_back(message);
+                    log::info!("processing pause trade message sent to queue");
+                }
                 SequencerMessage::BookModelUpdate(message) => {
                     self.state_receiver
                         .send(StateManagementMessage::ResumeProcessing);
+                    log::info!("sequencer run: book_model_update")
                 }
             },
             SequencerState::ResumeProcessing => {
@@ -185,11 +192,6 @@ impl SequencerActor {
             }
         }
     }
-
-    // pub fn enqueue_message(&mut self, message: SequencerMessage) {
-    // self.queue.push_back(message);
-    // todo!();
-    // }
 
     pub async fn process_queue(&mut self, ob_update_timestamp: SequencerMessage) {
         // NOTE: this implementation assumes sequential ordering, by timestamp, of the data coming
@@ -216,18 +218,34 @@ impl SequencerActor {
     }
 }
 
-//
-
 #[derive(Debug)]
 pub struct SequencerHandler {
     sender: mpsc::Sender<SequencerMessage>,
 }
 impl SequencerHandler {
     async fn new(matching_engine_sender: mpsc::Sender<MatchingEngineMessage>) -> Self {
-        let (sender, reciever) = mpsc::channel(32);
-        // let actor = SequencerActor::new()
-        Self { sender }
+        // let (sender, reciever) = mpsc::channel(32);
+        let (state_sender, state_receiver) = mpsc::channel(32);
+        let (matching_eng_sender, matching_eng_recv) = mpsc::channel(32);
+        let (sequencer_sender, sequencer_receiver) = mpsc::channel(32);
+        let (timer_sender, timer_reciver) = mpsc::channel(32);
+
+        let sequencer_actor = SequencerActor::new(
+            sequencer_receiver,
+            state_sender.clone(),
+            matching_eng_sender,
+        );
+        let sequencer_state_actor = SequencerStateActor::new(state_receiver, timer_sender);
+
+        // tokio::spawn(async move {
+        //     state_management_actor.
+        // });
+
+        Self {
+            sender: sequencer_sender,
+        }
     }
+    // let actor = SequencerActor::new()
 }
 #[derive(Debug)]
 pub enum SequencerMessage {
@@ -249,11 +267,47 @@ pub struct SequencerStateActor {
     timer_sender: mpsc::Sender<()>,
     state: SequencerState,
 }
+impl SequencerStateActor {
+    fn new(
+        receiver: mpsc::Receiver<StateManagementMessage>,
+        timer_sender: mpsc::Sender<()>,
+    ) -> Self {
+        SequencerStateActor {
+            receiver,
+            timer_sender,
+            state: SequencerState::Processing,
+        }
+    }
+    async fn run(&mut self, msg: StateManagementMessage) {
+        match msg {
+            StateManagementMessage::Processing => {
+                self.state = SequencerState::to_processing();
+            }
+            StateManagementMessage::PauseProcessing => {
+                self.state = SequencerState::to_pause_processing();
+            }
+            StateManagementMessage::ResumeProcessing => {
+                self.state = SequencerState::to_resume_proceessing();
+            }
+        }
+    }
+}
 #[derive(Debug)]
 pub enum SequencerState {
     Processing,
     PauseProcessing,
     ResumeProcessing,
+}
+impl SequencerState {
+    fn to_processing() -> Self {
+        SequencerState::Processing
+    }
+    fn to_pause_processing() -> Self {
+        SequencerState::PauseProcessing
+    }
+    fn to_resume_proceessing() -> Self {
+        SequencerState::ResumeProcessing
+    }
 }
 impl Default for SequencerState {
     fn default() -> Self {
@@ -286,7 +340,6 @@ impl TimerActor {
                     }
                 }
                 _ = interval.tick() => {
-                    // Timer completed, send PauseProcessing message
                     self.state_management_sender
                         .send(StateManagementMessage::PauseProcessing)
                         .await?;
@@ -305,10 +358,17 @@ impl TimerActor {
 #[derive(Debug, Clone)]
 pub struct MatchingEngineActor<S>
 where
-    S: Send,
+    S: Send + Sync,
 {
     pub data: S,
 }
+
+impl<S: Send + Sync> MatchingEngineActor<S> {
+    fn handle_message(&self, msg: MatchingEngineMessage) {
+        println!("{:?}", msg);
+    }
+}
+#[derive(Debug)]
 pub enum MatchingEngineMessage {
     TakerTrade(Arc<TakerTrades>),
     BookModelUpdate(BookModel),
