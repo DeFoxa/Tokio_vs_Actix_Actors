@@ -81,6 +81,37 @@ async fn run_trade_actor<T: ToTakerTrades + Send + Sync>(
     }
     Ok(())
 }
+#[derive(Debug)]
+pub struct OrderBookStreamMessage<T>
+where
+    T: ToBookModels + Send + Sync + 'static,
+{
+    data: T,
+}
+#[derive(Debug)]
+pub struct OrderBookActor<T>
+where
+    T: ToBookModels + Send + Sync + 'static,
+{
+    pub receiver: mpsc::Receiver<OrderBookStreamMessage<T>>,
+    pub sequencer_sender: mpsc::Sender<SequencerMessage>,
+}
+impl<T: ToBookModels + Send + Sync + 'static> OrderBookActor<T> {
+    async fn new(
+        receiver: mpsc::Receiver<OrderBookStreamMessage<T>>,
+        sequencer_sender: mpsc::Sender<SequencerMessage>,
+    ) -> Self {
+        OrderBookActor {
+            receiver,
+            sequencer_sender,
+        }
+    }
+    async fn handle_message(&mut self, msg: OrderBookStreamMessage<T>) -> Result<()> {
+        let sequencer_message = SequencerMessage::BookModelUpdate(msg.data.to_book_model()?);
+        self.sequencer_sender.send(sequencer_message).await?;
+        Ok(())
+    }
+}
 
 //
 // SEQUENCER
@@ -99,199 +130,10 @@ async fn run_trade_actor<T: ToTakerTrades + Send + Sync>(
 // where they are sorted by timestamp. When the new ob_update comes through than the associated
 // timestamp is logged and only the messages that are queued after the ob update timestamp are
 // sent to the matching engine  along with the ob_update
+//
+// Eventually instead of processing pauses, I'll add the GET requests to fill in ob state but for
+// now pauses are fine
 
-#[derive(Debug)]
-pub struct SequencerActor {
-    receiver: mpsc::Receiver<SequencerMessage>,
-    state_receiver: mpsc::Sender<StateManagementMessage>,
-    matching_engine_actor: mpsc::Sender<MatchingEngineMessage>,
-    pub queue: VecDeque<TakerTrades>,
-    last_ob_update: Instant,
-    sequencer_state: SequencerState,
-    previous_trade_timestamp: Option<i64>,
-}
-
-impl SequencerActor {
-    pub fn new(
-        receiver: mpsc::Receiver<SequencerMessage>,
-        state_receiver: mpsc::Sender<StateManagementMessage>,
-        matching_engine_actor: mpsc::Sender<MatchingEngineMessage>,
-    ) -> Self {
-        SequencerActor {
-            receiver,
-            state_receiver,
-            matching_engine_actor,
-            queue: VecDeque::new(),
-            last_ob_update: Instant::now(),
-            previous_trade_timestamp: None,
-            sequencer_state: SequencerState::default(),
-        }
-    }
-    pub fn handle_message(&mut self, msg: SequencerMessage) {
-        //NOTE: handle SequencerState = Processing
-        let matching_engine_msg = match msg {
-            SequencerMessage::TakerTrade(trades) => {
-                MatchingEngineMessage::TakerTrade(Arc::new(trades))
-            }
-
-            SequencerMessage::BookModelUpdate(book_update) => {
-                MatchingEngineMessage::BookModelUpdate(book_update)
-            }
-        };
-        self.matching_engine_actor.send(matching_engine_msg);
-
-        //NOTE: Below is pseudocode for verifying that each new trade msg is sequenced properly
-        //relative to previous messages, im including this but don't think it will be performant
-        //enough to justify the safety measures. Matching engine will be too slow relative to
-        //exchange matching engine.
-        //
-        //Going to test the accuracy of stream messages seperately during high vol to see if such a safety
-        //measure is necessary and then will test safe/accurate system relative to unsafe for
-        //perf. Including this here so I don't forget later. Another option is to spin off another
-        //thread that handles verifying transaction ordering with ability to send new state update
-        //to Sequencer to pause if x number of incoming trades arrived in inaccurate sequence.
-        //
-        // match msg {
-        //     SequencerMessage::TakerTrade(trade) => {
-        //         if msg.transaction_timestamp >= self.previous_trade_timestamp{
-        //             self.matching_engine_actor.send(msg);
-        //         } else {
-        //             self.stream_sequencer_queue.push_back(msg);
-        //             self.process_stream_error_queue(); write a method that will handle queued
-        //             messages in cases where the sequential ordering of data coming from
-        //             exchange stream
-        //             is inaccurate.
-        //         }
-        //     }
-        // }
-    }
-
-    pub async fn run(&mut self, message: SequencerMessage) {
-        match self.sequencer_state {
-            SequencerState::Processing => {
-                self.handle_message(message);
-                // not adding a log::info! message for standard processing for time being, only want
-                // to see non standard scenarios in logs
-            }
-            SequencerState::PauseProcessing => match message {
-                SequencerMessage::TakerTrade(message) => {
-                    self.queue.push_back(message);
-                    log::info!("processing pause trade message sent to queue");
-                }
-                SequencerMessage::BookModelUpdate(message) => {
-                    self.state_receiver
-                        .send(StateManagementMessage::ResumeProcessing);
-                    log::info!("sequencer run: book_model_update")
-                }
-            },
-            SequencerState::ResumeProcessing => {
-                self.process_queue(message);
-                log::info!(
-                    "resume process from run, state should update from StateManagement, verify"
-                );
-            }
-        }
-    }
-
-    pub async fn process_queue(&mut self, ob_update_timestamp: SequencerMessage) {
-        // NOTE: this implementation assumes sequential ordering, by timestamp, of the data coming
-        // from the ws stream, must be verified that this is the common behavior of the stream.
-        // i.e. no common, (we can always handle rare cases later), errors in transaction timestamp sent through the stream.
-        self.queue
-            .make_contiguous()
-            .sort_by(|a, b| a.transaction_timestamp.cmp(&b.transaction_timestamp));
-        let index = match self
-            .queue
-            .binary_search_by_key(&ob_update_timestamp.timestamp(), |message| {
-                message.transaction_timestamp
-            }) {
-            Ok(index) => index,
-            Err(index) => index,
-        };
-
-        for message in self.queue.drain(..index) {
-            let matching_engine_message = MatchingEngineMessage::TakerTrade(Arc::new(message));
-            self.matching_engine_actor
-                .send(matching_engine_message)
-                .await;
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct SequencerHandler {
-    sender: mpsc::Sender<SequencerMessage>,
-}
-impl SequencerHandler {
-    async fn new(matching_engine_sender: mpsc::Sender<MatchingEngineMessage>) -> Self {
-        // let (sender, reciever) = mpsc::channel(32);
-        let (state_sender, state_receiver) = mpsc::channel(32);
-        let (matching_eng_sender, matching_eng_recv) = mpsc::channel(32);
-        let (sequencer_sender, sequencer_receiver) = mpsc::channel(32);
-        let (timer_sender, timer_reciver) = mpsc::channel(32);
-
-        let sequencer_actor = SequencerActor::new(
-            sequencer_receiver,
-            state_sender.clone(),
-            matching_eng_sender,
-        );
-        let sequencer_state_actor = SequencerStateActor::new(state_receiver, timer_sender);
-
-        // tokio::spawn(async move {
-        //     state_management_actor.
-        // });
-
-        Self {
-            sender: sequencer_sender,
-        }
-    }
-    // let actor = SequencerActor::new()
-}
-#[derive(Debug)]
-pub enum SequencerMessage {
-    TakerTrade(TakerTrades),
-    BookModelUpdate(BookModel),
-}
-impl SequencerMessage {
-    #[instrument]
-    fn timestamp(&self) -> i64 {
-        match self {
-            SequencerMessage::TakerTrade(trade) => trade.transaction_timestamp,
-            SequencerMessage::BookModelUpdate(book) => book.timestamp,
-        }
-    }
-}
-
-pub struct SequencerStateActor {
-    receiver: mpsc::Receiver<StateManagementMessage>,
-    timer_sender: mpsc::Sender<()>,
-    state: SequencerState,
-}
-impl SequencerStateActor {
-    fn new(
-        receiver: mpsc::Receiver<StateManagementMessage>,
-        timer_sender: mpsc::Sender<()>,
-    ) -> Self {
-        SequencerStateActor {
-            receiver,
-            timer_sender,
-            state: SequencerState::Processing,
-        }
-    }
-    async fn run(&mut self, msg: StateManagementMessage) {
-        match msg {
-            StateManagementMessage::Processing => {
-                self.state = SequencerState::to_processing();
-            }
-            StateManagementMessage::PauseProcessing => {
-                self.state = SequencerState::to_pause_processing();
-            }
-            StateManagementMessage::ResumeProcessing => {
-                self.state = SequencerState::to_resume_proceessing();
-            }
-        }
-    }
-}
 #[derive(Debug)]
 pub enum SequencerState {
     Processing,
@@ -314,6 +156,146 @@ impl Default for SequencerState {
         SequencerState::Processing
     }
 }
+
+#[derive(Debug)]
+pub struct SequencerActor {
+    receiver: mpsc::Receiver<SequencerMessage>,
+    state_receiver: mpsc::Receiver<StateManagementMessage>,
+    state_update: mpsc::Sender<StateManagementMessage>,
+    timer_sender: mpsc::Sender<BookModel>,
+    matching_engine_actor: mpsc::Sender<MatchingEngineMessage>,
+    pub queue: VecDeque<TakerTrades>,
+    sequencer_state: SequencerState,
+}
+
+impl SequencerActor {
+    pub fn new(
+        receiver: mpsc::Receiver<SequencerMessage>,
+        state_receiver: mpsc::Receiver<StateManagementMessage>,
+        state_update: mpsc::Sender<StateManagementMessage>,
+        timer_sender: mpsc::Sender<BookModel>,
+        matching_engine_actor: mpsc::Sender<MatchingEngineMessage>,
+    ) -> Self {
+        SequencerActor {
+            receiver,
+            state_receiver,
+            state_update,
+            timer_sender,
+            matching_engine_actor,
+            queue: VecDeque::new(),
+            sequencer_state: SequencerState::default(),
+        }
+    }
+
+    pub fn handle_message(&mut self, msg: SequencerMessage) {
+        //NOTE: handle SequencerState = Processing
+        let matching_engine_msg = match msg {
+            SequencerMessage::TakerTrade(trades) => {
+                MatchingEngineMessage::TakerTrade(Arc::new(trades))
+            }
+
+            SequencerMessage::BookModelUpdate(book_update) => {
+                MatchingEngineMessage::BookModelUpdate(book_update)
+            }
+        };
+        self.matching_engine_actor.send(matching_engine_msg);
+    }
+
+    pub async fn run(&mut self) -> Result<()> {
+        loop {
+            tokio::select! {
+                 Some(sequencer_msg) = self.receiver.recv() => {
+                     match self.sequencer_state {
+                        SequencerState::Processing => {
+                            match sequencer_msg {
+                                SequencerMessage::BookModelUpdate(book_update) => {
+                                    self.timer_sender.send(book_update.clone()).await?;
+                                    self.handle_message(SequencerMessage::BookModelUpdate(book_update));
+                                }
+                                _ => self.handle_message(sequencer_msg),
+                            }
+                            // not adding a log::info! message for standard processing for time being, only want
+                            // to see non standard scenarios in logs
+                        }
+                        SequencerState::PauseProcessing => match sequencer_msg {
+                            SequencerMessage::TakerTrade(sequencer_msg) => {
+                                self.queue.push_back(sequencer_msg);
+                                log::info!("processing pause trade message sent to queue");
+                            }
+                            SequencerMessage::BookModelUpdate(sequencer_msg) => {
+                                self.state_update
+                                    .send(StateManagementMessage::ResumeProcessing);
+                                log::info!("sequencer run: book_model_update")
+                            }
+                        },
+                        SequencerState::ResumeProcessing => {
+                            self.process_queue(sequencer_msg);
+                            log::info!(
+                                "Resuming process from SequencerActor::run()"
+                            );
+                        }
+                    }
+                }
+                 Some(state_msg) = self.state_receiver.recv() => {
+                     match state_msg {
+                         StateManagementMessage::Processing => {
+                             self.sequencer_state= SequencerState::to_processing();
+                            }
+                         StateManagementMessage::PauseProcessing => {
+                             self.sequencer_state = SequencerState::to_pause_processing();
+                         }
+                         StateManagementMessage::ResumeProcessing => {
+                             self.sequencer_state = SequencerState::to_resume_proceessing();
+                         }
+
+                     }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn process_queue(&mut self, ob_update_timestamp: SequencerMessage) {
+        // NOTE: this implementation assumes sequential ordering, by timestamp, of the incoming stream data
+        //  must be verified that this is the common behavior of the stream. i.e. no common, (we can always
+        //  handle rare cases later), errors in transaction timestamp sent through the stream.
+
+        self.queue
+            .make_contiguous()
+            .sort_by(|a, b| a.transaction_timestamp.cmp(&b.transaction_timestamp));
+        let index = match self
+            .queue
+            .binary_search_by_key(&ob_update_timestamp.timestamp(), |message| {
+                message.transaction_timestamp
+            }) {
+            Ok(index) => index,
+            Err(index) => index,
+        };
+
+        for message in self.queue.drain(..index) {
+            let matching_engine_message = MatchingEngineMessage::TakerTrade(Arc::new(message));
+            self.matching_engine_actor
+                .send(matching_engine_message)
+                .await;
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum SequencerMessage {
+    TakerTrade(TakerTrades),
+    BookModelUpdate(BookModel),
+}
+impl SequencerMessage {
+    #[instrument]
+    fn timestamp(&self) -> i64 {
+        match self {
+            SequencerMessage::TakerTrade(trade) => trade.transaction_timestamp,
+            SequencerMessage::BookModelUpdate(book) => book.timestamp,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum StateManagementMessage {
     Processing,
@@ -322,18 +304,24 @@ pub enum StateManagementMessage {
 }
 
 pub struct TimerActor {
-    receiver: mpsc::Receiver<()>,
+    receiver: mpsc::Receiver<SequencerMessage>,
     state_management_sender: mpsc::Sender<StateManagementMessage>,
 }
+
+/// TimerActor is a watchdog for the orderbook state updates. OB stream updates come every ~250ms,
+/// in the current implementation an interval is set for 1s, should no ob update come in
+/// that period then a SequencerStateMessage is sent to set processing to paused until a new ob
+/// update comes through. Eventually I'll change this to integrate rest requests for filling blanks
+/// when stream isn't updating.
 impl TimerActor {
-    pub async fn run_timer(&self, mut receiver: mpsc::Receiver<SequencerMessage>) -> Result<()> {
+    pub async fn run_timer(&mut self) -> Result<()> {
         let mut interval = tokio::time::interval(Duration::from_secs(1));
 
         loop {
             tokio::select! {
-                Some(msg) = receiver.recv() => {
+                Some(msg) = self.receiver.recv() => {
                     match msg {
-                        SequencerMessage::BookModelUpdate(ref book_model) => {
+                        SequencerMessage::BookModelUpdate(_) => {
                             interval.reset();
                         }
                         _ => log::debug!("Incorrect SequencerMessage type being passed to timer"),
@@ -343,7 +331,6 @@ impl TimerActor {
                     self.state_management_sender
                         .send(StateManagementMessage::PauseProcessing)
                         .await?;
-                    break;
                 }
             }
         }
@@ -351,6 +338,46 @@ impl TimerActor {
         Ok(())
     }
 }
+
+#[derive(Debug)]
+pub struct SequencerHandler {
+    sequencer_sender: mpsc::Sender<SequencerMessage>,
+}
+
+impl SequencerHandler {
+    async fn new(matching_engine_sender: mpsc::Sender<MatchingEngineMessage>) -> Self {
+        // NOTE, for later reference: centralized instantiator of all sequencer channels,
+        // includign timer. This method will be called from main() or whatever other function
+        // handles the actor system. ruN_timer() should be called from sequenceractor run(), with
+        // ob_update messages passed to the matching-engine, ResumeProcess matched to current
+        // state and run_timer for interval resets.
+        //
+        // let (sender, reciever) = mpsc::channel(32);
+        // let (state_sender, state_receiver) = mpsc::channel(32);
+        // let (state_update_sender, state_update_receiver) = mpsc::channel(32);
+        // let (matching_eng_sender, matching_eng_recv) = mpsc::channel(32);
+        let (sequencer_sender, sequencer_receiver) = mpsc::channel::<SequencerMessage>(32);
+        let (timer_sender, timer_reciver) = mpsc::channel::<StateManagementMessage>(32);
+        //
+        // let sequencer_actor = SequencerActor::new(
+        //     sequencer_receiver,
+        //     state_receiver.clone(),
+        //     state_update_sender,
+        //     matching_eng_sender,
+        // );
+        // let sequencer_state_actor = SequencerStateActor::new(state_receiver, timer_sender);
+
+        // tokio::spawn(async move {
+        //     state_management_actor.
+        // });
+
+        Self {
+            sequencer_sender: sequencer_sender,
+        }
+    }
+    // let actor = SequencerActor::new()
+}
+
 //
 // MATCHING ENGINE
 //
@@ -373,6 +400,66 @@ pub enum MatchingEngineMessage {
     TakerTrade(Arc<TakerTrades>),
     BookModelUpdate(BookModel),
 }
+
+//OLD SEQUENCER_STATE_ACTOR
+//
+// pub struct SequencerStateActor {
+//     receiver: mpsc::Receiver<StateManagementMessage>,
+//     timer_sender: mpsc::Sender<()>,
+//     state: SequencerState,
+// }
+// impl SequencerStateActor {
+//     fn new(
+//         receiver: mpsc::Receiver<StateManagementMessage>,
+//         timer_sender: mpsc::Sender<()>,
+//     ) -> Self {
+//         SequencerStateActor {
+//             receiver,
+//             timer_sender,
+//             state: SequencerState::Processing,
+//         }
+//     }
+//     async fn run(&mut self, msg: StateManagementMessage) {
+//         match msg {
+//             StateManagementMessage::Processing => {
+//                 self.state = SequencerState::to_processing();
+//             }
+//             StateManagementMessage::PauseProcessing => {
+//                 self.state = SequencerState::to_pause_processing();
+//             }
+//             StateManagementMessage::ResumeProcessing => {
+//                 self.state = SequencerState::to_resume_proceessing();
+//             }
+//         }
+//     }
+// }
+//
+// OLD SEQUENCER RUn
+// match self.sequencer_state {
+//     SequencerState::Processing => {
+//         self.handle_message(message);
+//         // not adding a log::info! message for standard processing for time being, only want
+//         // to see non standard scenarios in logs
+//     }
+//     SequencerState::PauseProcessing => match message {
+//         SequencerMessage::TakerTrade(message) => {
+//             self.queue.push_back(message);
+//             log::info!("processing pause trade message sent to queue");
+//         }
+//         SequencerMessage::BookModelUpdate(message) => {
+//             self.state_receiver
+//                 .send(StateManagementMessage::ResumeProcessing);
+//             log::info!("sequencer run: book_model_update")
+//         }
+//     },
+//     SequencerState::ResumeProcessing => {
+//         self.process_queue(message);
+//         log::info!(
+//             "resume process from run, state should update from StateManagement, verify"
+//         );
+//     }
+// }
+
 //OLD RUN
 // loop {
 //     tokio::select! {
