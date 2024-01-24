@@ -11,7 +11,7 @@ use crate::concurrency_setup::actix_actor_model::*;
 use crate::concurrency_setup::tokio_actor_model::{
     MatchingEngineActor as MEA, MatchingEngineMessage, OrderBookActorHandler,
     OrderBookStreamMessage as OBSM, SequencerActor as SA, SequencerHandler, SequencerMessage as SM,
-    TradeStreamActor as TSA, TradeStreamMessage as TSM,
+    StateManagementMessage, TradeStreamActor as TSA, TradeStreamMessage as TSM,
 };
 use concurrency_setup::tokio_actor_model::TradeStreamActorHandler;
 use diesel::prelude::*;
@@ -50,7 +50,17 @@ async fn main() -> Result<()> {
     let (matching_engine_sender, matching_engine_receiver) =
         mpsc::channel::<MatchingEngineMessage>(32);
     let (sequencer_sender, _sequencer_receiver) = mpsc::channel::<SM>(32);
-    let seq_handler = SequencerHandler::new(matching_engine_sender).await?;
+
+    let (state_sender, state_receiver) = mpsc::channel::<StateManagementMessage>(32);
+    let (timer_sender, timer_receiver) = mpsc::channel::<SM>(32);
+    let seq_actor = SA::new(
+        _sequencer_receiver,
+        state_receiver,
+        state_sender,
+        timer_sender,
+        matching_engine_sender,
+    );
+    // let seq_handler = SequencerHandler::new(matching_engine_sender).await?;
     let trade_stream_handler = TradeStreamActorHandler::new(sequencer_sender.clone()).await;
     let order_book_handler = OrderBookActorHandler::new(sequencer_sender.clone()).await;
 
