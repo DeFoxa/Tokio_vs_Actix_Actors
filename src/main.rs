@@ -9,9 +9,11 @@ mod utils;
 
 use crate::concurrency_setup::actix_actor_model::*;
 use crate::concurrency_setup::tokio_actor_model::{
-    MatchingEngineActor as MEA, SequencerActor as SA, SequencerMessage as SM,
+    MatchingEngineActor as MEA, MatchingEngineMessage, OrderBookActorHandler,
+    OrderBookStreamMessage as OBSM, SequencerActor as SA, SequencerHandler, SequencerMessage as SM,
     TradeStreamActor as TSA, TradeStreamMessage as TSM,
 };
+use concurrency_setup::tokio_actor_model::TradeStreamActorHandler;
 use diesel::prelude::*;
 use diesel::PgConnection;
 use dotenvy::dotenv;
@@ -45,6 +47,47 @@ pub const MAINNET: &str = "wss://fstream.binance.com";
 // #[actix_rt::main]
 #[tokio::main]
 async fn main() -> Result<()> {
+    let (matching_engine_sender, matching_engine_receiver) =
+        mpsc::channel::<MatchingEngineMessage>(32);
+    let (sequencer_sender, _sequencer_receiver) = mpsc::channel::<SM>(32);
+    let seq_handler = SequencerHandler::new(matching_engine_sender).await?;
+    let trade_stream_handler = TradeStreamActorHandler::new(sequencer_sender.clone()).await;
+    let order_book_handler = OrderBookActorHandler::new(sequencer_sender.clone()).await;
+
+    let trade_data = BinanceTrades {
+        event_type: "aggTrade".to_string(),
+        event_time: 1705537089147,
+        symbol: "BTCUSDT".to_string(),
+        aggegate_id: 1991573987,
+        price: 42666.7,
+        quantity: 0.001,
+        first_trade_id: 4502236286,
+        last_trade_id: 4502236286,
+        trade_timestamp: 1705537090087,
+        is_buyer_mm: false,
+    };
+    let test_trade = TSM { data: trade_data };
+    let ob_data = BinancePartialBook {
+        depth_update: "depthUpdate".to_string(),
+        event_timestamp: 1705595381665,
+        timestamp: 1705595381665,
+        symbol: "BTCUSDT".to_string(),
+        first_update_id: 1705595381665,
+        final_update_id: 1705595381665,
+        final_update_id_last_stream: 1705595381665,
+        bids: vec![
+            ["2510.18".to_string(), "28.709".to_string()],
+            ["2510.18".to_string(), "28.709".to_string()],
+        ],
+
+        asks: vec![
+            ["2510.18".to_string(), "28.709".to_string()],
+            ["2510.18".to_string(), "28.709".to_string()],
+        ],
+    };
+    let test_ob = OBSM { data: ob_data };
+    trade_stream_handler.send(test_trade).await?;
+    order_book_handler.send(test_ob).await?;
     // let file_appender =
     //     tracing_appender::rolling::minutely(".logs", "concurrency_model_testing.log");
     // let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);

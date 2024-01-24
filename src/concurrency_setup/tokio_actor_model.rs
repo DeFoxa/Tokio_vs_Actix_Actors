@@ -86,7 +86,7 @@ pub struct OrderBookStreamMessage<T>
 where
     T: ToBookModels + Send + Sync + 'static,
 {
-    data: T,
+    pub data: T,
 }
 #[derive(Debug)]
 pub struct OrderBookActor<T>
@@ -379,7 +379,7 @@ pub struct SequencerHandler {
 }
 
 impl SequencerHandler {
-    async fn new(matching_engine_sender: mpsc::Sender<MatchingEngineMessage>) -> Result<Self> {
+    pub async fn new(matching_engine_sender: mpsc::Sender<MatchingEngineMessage>) -> Result<Self> {
         // NOTE, for later reference: centralized instantiator of all sequencer channels,
         // includign timer. This method will be called from main() or whatever other function
         // handles the actor system. ruN_timer() should be called from sequenceractor run(), with
@@ -410,6 +410,10 @@ impl SequencerHandler {
             timer_actor.run_timer().await.expect("TimerActor Failed");
         });
         Ok(SequencerHandler { sequencer_sender })
+    }
+    pub async fn send(&self, msg: SequencerMessage) -> Result<()> {
+        self.sequencer_sender.send(msg).await?;
+        Ok(())
     }
 }
 
