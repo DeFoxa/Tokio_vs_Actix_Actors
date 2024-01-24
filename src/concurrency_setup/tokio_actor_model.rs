@@ -112,6 +112,38 @@ impl<T: ToBookModels + Send + Sync + 'static> OrderBookActor<T> {
         Ok(())
     }
 }
+#[derive(Debug)]
+pub struct OrderBookActorHandler<T>
+where
+    T: ToBookModels + Send + Sync + 'static,
+{
+    sender: mpsc::Sender<OrderBookStreamMessage<T>>,
+}
+impl<T: ToBookModels + Send + Sync + 'static> OrderBookActorHandler<T> {
+    pub async fn new(sequencer_sender: mpsc::Sender<SequencerMessage>) -> Self {
+        let (sender, receiver) = mpsc::channel(32);
+        let actor = OrderBookActor::new(receiver, sequencer_sender);
+        tokio::spawn(async move {
+            run_book_actor(actor.await);
+        });
+        Self { sender }
+    }
+    pub async fn send(
+        &self,
+        msg: OrderBookStreamMessage<T>,
+    ) -> Result<(), mpsc::error::SendError<OrderBookStreamMessage<T>>> {
+        self.sender.send(msg).await
+    }
+}
+
+pub async fn run_book_actor<T: ToBookModels + Send + Sync>(
+    mut actor: OrderBookActor<T>,
+) -> Result<()> {
+    while let Some(message) = actor.receiver.recv().await {
+        let send_message = actor.handle_message(message).await?;
+    }
+    Ok(())
+}
 
 //
 // SEQUENCER
@@ -162,7 +194,7 @@ pub struct SequencerActor {
     receiver: mpsc::Receiver<SequencerMessage>,
     state_receiver: mpsc::Receiver<StateManagementMessage>,
     state_update: mpsc::Sender<StateManagementMessage>,
-    timer_sender: mpsc::Sender<BookModel>,
+    timer_sender: mpsc::Sender<SequencerMessage>,
     matching_engine_actor: mpsc::Sender<MatchingEngineMessage>,
     pub queue: VecDeque<TakerTrades>,
     sequencer_state: SequencerState,
@@ -173,7 +205,7 @@ impl SequencerActor {
         receiver: mpsc::Receiver<SequencerMessage>,
         state_receiver: mpsc::Receiver<StateManagementMessage>,
         state_update: mpsc::Sender<StateManagementMessage>,
-        timer_sender: mpsc::Sender<BookModel>,
+        timer_sender: mpsc::Sender<SequencerMessage>,
         matching_engine_actor: mpsc::Sender<MatchingEngineMessage>,
     ) -> Self {
         SequencerActor {
@@ -209,7 +241,7 @@ impl SequencerActor {
                         SequencerState::Processing => {
                             match sequencer_msg {
                                 SequencerMessage::BookModelUpdate(book_update) => {
-                                    self.timer_sender.send(book_update.clone()).await?;
+                                    self.timer_sender.send(SequencerMessage::BookModelUpdate(book_update.clone())).await?;
                                     self.handle_message(SequencerMessage::BookModelUpdate(book_update));
                                 }
                                 _ => self.handle_message(sequencer_msg),
@@ -256,9 +288,11 @@ impl SequencerActor {
     }
 
     pub async fn process_queue(&mut self, ob_update_timestamp: SequencerMessage) {
-        // NOTE: this implementation assumes sequential ordering, by timestamp, of the incoming stream data
-        //  must be verified that this is the common behavior of the stream. i.e. no common, (we can always
-        //  handle rare cases later), errors in transaction timestamp sent through the stream.
+        // NOTE: this implementation assumes sequential, sorted, ordering  by timestamp, of the incoming stream data
+        //  must be verified that this is the common behavior of the stream data. Obviously the binary search is
+        //  worthless if the timestamps aren't actually sequentially entering queue by ts, but from what i've seen
+        //  re: local_id/timestamp ordering, it should be naturally sorted but I'll verify later. More interested
+        //  in the diff b/w backpressure/capacity of the different concurrency models.
 
         self.queue
             .make_contiguous()
@@ -345,37 +379,38 @@ pub struct SequencerHandler {
 }
 
 impl SequencerHandler {
-    async fn new(matching_engine_sender: mpsc::Sender<MatchingEngineMessage>) -> Self {
+    async fn new(matching_engine_sender: mpsc::Sender<MatchingEngineMessage>) -> Result<Self> {
         // NOTE, for later reference: centralized instantiator of all sequencer channels,
         // includign timer. This method will be called from main() or whatever other function
         // handles the actor system. ruN_timer() should be called from sequenceractor run(), with
         // ob_update messages passed to the matching-engine, ResumeProcess matched to current
         // state and run_timer for interval resets.
-        //
-        // let (sender, reciever) = mpsc::channel(32);
-        // let (state_sender, state_receiver) = mpsc::channel(32);
-        // let (state_update_sender, state_update_receiver) = mpsc::channel(32);
-        // let (matching_eng_sender, matching_eng_recv) = mpsc::channel(32);
+
         let (sequencer_sender, sequencer_receiver) = mpsc::channel::<SequencerMessage>(32);
-        let (timer_sender, timer_reciver) = mpsc::channel::<StateManagementMessage>(32);
-        //
-        // let sequencer_actor = SequencerActor::new(
-        //     sequencer_receiver,
-        //     state_receiver.clone(),
-        //     state_update_sender,
-        //     matching_eng_sender,
-        // );
-        // let sequencer_state_actor = SequencerStateActor::new(state_receiver, timer_sender);
+        let (state_sender, state_receiver) = mpsc::channel::<StateManagementMessage>(32);
+        let (timer_sender, timer_receiver) = mpsc::channel::<SequencerMessage>(32);
+        let (matching_engine_sender, matching_engine_receiver) =
+            mpsc::channel::<MatchingEngineMessage>(32);
 
-        // tokio::spawn(async move {
-        //     state_management_actor.
-        // });
-
-        Self {
-            sequencer_sender: sequencer_sender,
-        }
+        let mut sequencer_actor = SequencerActor::new(
+            sequencer_receiver,
+            state_receiver,
+            state_sender.clone(),
+            timer_sender,
+            matching_engine_sender,
+        );
+        let mut timer_actor = TimerActor {
+            receiver: timer_receiver,
+            state_management_sender: state_sender,
+        };
+        tokio::spawn(async move {
+            sequencer_actor.run().await.expect("SequencerActor Failed");
+        });
+        tokio::spawn(async move {
+            timer_actor.run_timer().await.expect("TimerActor Failed");
+        });
+        Ok(SequencerHandler { sequencer_sender })
     }
-    // let actor = SequencerActor::new()
 }
 
 //
