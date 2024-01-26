@@ -1,30 +1,38 @@
-use self::schema::binancetrades;
+#![allow(unused)]
+use actix::Actor;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenvy::dotenv;
+use futures_util::StreamExt;
+use lib::concurrency_setup::actix_actor_model::*;
+use lib::concurrency_setup::tokio_actor_model::TradeStreamActorHandler;
+use lib::concurrency_setup::tokio_actor_model::{
+    MatchingEngineActor as MEA, MatchingEngineHandler, MatchingEngineMessage,
+    OrderBookActorHandler, OrderBookStreamMessage as OBSM, SequencerActor as SA, SequencerHandler,
+    SequencerMessage as SM, StateManagementMessage, TradeStreamActor as TSA,
+    TradeStreamMessage as TSM,
+};
+use lib::schema::binancetrades::dsl::*;
+use serde_json::Value;
+use tungstenite::Message;
+// use lib::{schema::binancetrades, types::*};
+use anyhow::Result;
+use lib::{
+    client::{ws::*, ws_types::*},
+    types::*,
+    utils::*,
+};
+
 use serde::Deserialize;
 use std::env;
-//
 
-//
-fn main() {
-    let test = BinanceTrades {
-        event_type: "testing".to_string(),
-        event_time: 1234,
-        symbol: "TEST_BTC".to_string(),
-        aggregate_id: 1,
-        price: 46999.01,
-        quantity: 1.0,
-        first_trade_id: 2,
-        last_trade_id: 4,
-        trade_timestamp: 56789,
-        is_buyer_mm: false,
-    };
-    let connection = &mut establish_connection;
-    let entry = diesel::insert_into(binancetrades)
-        .values(test)
-        .execute(connection);
+pub const MAINNET: &str = "wss://fstream.binance.com";
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    book_data_to_db().await?;
     // todo!();
+    Ok(())
 }
 fn establish_connection() -> PgConnection {
     dotenv().ok();
@@ -34,26 +42,52 @@ fn establish_connection() -> PgConnection {
         .unwrap_or_else(|_| panic!("error connecting to DB: {}", database_url))
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct BinanceTrades {
-    #[serde(rename = "e")]
-    pub event_type: String,
-    #[serde(rename = "E")]
-    pub event_time: i64,
-    #[serde(rename = "s")]
-    pub symbol: String,
-    #[serde(rename = "a")]
-    pub aggregate_id: i64,
-    #[serde(rename = "p")]
-    pub price: f64,
-    #[serde(rename = "q")]
-    pub quantity: f64,
-    #[serde(rename = "f")]
-    pub first_trade_id: i64,
-    #[serde(rename = "l")]
-    pub last_trade_id: i64,
-    #[serde(rename = "T")]
-    pub trade_timestamp: i64,
-    #[serde(rename = "m")]
-    pub is_buyer_mm: bool,
+async fn book_data_to_db() -> Result<()> {
+    let pool = create_db_pool();
+    let db_actor = TradeStreamDBActor { pool: pool.clone() }.start();
+    let book_db_actor = BookModelDbActor { pool: pool }.start();
+
+    let (mut ws_state, Response) = Client::connect_combined_async(
+        MAINNET,
+        vec![
+            &StreamNameGenerator::combined_stream_partial_book("ethusdt", "10").await,
+            &StreamNameGenerator::combined_stream_trades_by_symbol("ethusdt").await,
+        ],
+    )
+    .await?;
+
+    let (write, read) = ws_state.socket.split();
+    read.for_each(|message| async {
+        match message {
+            Ok(Message::Text(text)) => {
+                let value: Value = serde_json::from_str(&text).expect("some error 1");
+                let other_event_type = value.get("e").and_then(Value::as_str);
+                match other_event_type {
+                    Some("aggTrade") => {
+                        let trades = serde_json::from_value::<BinanceTrades>(value.clone())
+                            .expect("error deserializing to binancetrades");
+
+                        db_actor.try_send(TradeStreamDBMessage {
+                            data: trades.to_db_model(),
+                        });
+                        // println!("{:?}", &trades);
+                    }
+                    Some("depthUpdate") => {
+                        let book = serde_json::from_value::<BinancePartialBook>(value.clone())
+                            .expect("error deserializing to PartialBook");
+                        book_db_actor.try_send(BookModelDbMessage {
+                            data: book.to_db_model(),
+                        });
+                        // println!("{:?}", &book);
+                    }
+                    _ => {
+                        eprintln!("Error matching deserialized fields, no aggTrade or depthUpdate");
+                    }
+                }
+            }
+            _ => (),
+        }
+    })
+    .await;
+    Ok(())
 }
