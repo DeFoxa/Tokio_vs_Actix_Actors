@@ -6,14 +6,13 @@ use diesel::{
 };
 use dotenvy::dotenv;
 use serde::{
-    de::{self, Deserializer as deser, SeqAccess, Visitor},
-    Deserialize, Deserializer, Serialize,
+    de::{self, Deserializer as deser, SeqAccess, Visitor}, Deserializer,
 };
-use serde_json::Value;
+
 use std::env;
 use std::fmt;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
+
+
 
 pub fn create_db_pool() -> Pool<ConnectionManager<PgConnection>> {
     dotenv().ok();

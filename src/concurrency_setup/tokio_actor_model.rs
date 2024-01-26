@@ -1,19 +1,17 @@
-use crate::{types::*, utils::*};
+use crate::{types::*};
 use anyhow::Result;
 use std::collections::VecDeque;
 use std::{
-    fmt,
-    fmt::{Debug, Display},
+    fmt::{Debug},
     sync::Arc,
-    time::{Duration, Instant},
+    time::{Duration},
 };
 use tokio::{
     sync::mpsc,
     task::JoinHandle,
-    time::{Duration as TD, Interval},
 };
-use tracing::{event, info, instrument, Level};
-use tracing_subscriber::prelude::*;
+use tracing::{instrument};
+
 
 ///
 /// Trade Stream Actor
@@ -87,7 +85,7 @@ async fn run_trade_actor<T: ToTakerTrades + Send + Sync>(
     mut actor: TradeStreamActor<T>,
 ) -> Result<()> {
     while let Some(message) = actor.receiver.recv().await {
-        let send_message = actor.handle_message(message).await?;
+        let _send_message = actor.handle_message(message).await?;
     }
     Ok(())
 }
@@ -157,7 +155,7 @@ pub async fn run_book_actor<T: ToBookModels + Send + Sync>(
     mut actor: OrderBookActor<T>,
 ) -> Result<()> {
     while let Some(message) = actor.receiver.recv().await {
-        let send_message = actor.handle_message(message).await?;
+        let _send_message = actor.handle_message(message).await?;
     }
     Ok(())
 }
@@ -391,7 +389,7 @@ impl TimerActor {
             tokio::select! {
                 Some(msg) = self.receiver.recv() => {
                     match msg {
-                        SequencerMessage::BookModelUpdate(msg) => {
+                        SequencerMessage::BookModelUpdate(_msg) => {
                             interval.reset();
                             tracing::info!("interval reset");
                         }

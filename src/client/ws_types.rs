@@ -1,13 +1,12 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Result};
 use futures_util::SinkExt;
-use once_cell::sync::Lazy;
-use reqwest::Response as res;
+
+
 use std::fmt;
-use std::{env, sync::Arc, thread, time::Duration};
+
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
-    sync::Mutex,
 };
 use tokio_tungstenite::{
     connect_async,

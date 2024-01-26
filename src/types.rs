@@ -1,8 +1,8 @@
 use crate::concurrency_setup::actix_actor_model::*;
 use crate::models::*;
 use actix::prelude::*;
-use actix_rt::{task::spawn_blocking, Arbiter, System};
-use std::time::{Duration, Instant};
+
+use std::time::{Instant};
 // use crate::schema::*;
 use crate::schema::{binancepartialbook, binancetrades};
 use crate::utils::*;
@@ -13,10 +13,10 @@ use serde::{
     de::{self, Deserializer as deser, SeqAccess, Visitor},
     Deserialize, Deserializer, Serialize,
 };
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BinaryHeap};
 use std::fmt;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
+
 
 pub trait ToTakerTrades {
     fn to_trades_type(&self) -> Result<TakerTrades>;
@@ -85,7 +85,7 @@ pub struct BookState {
 }
 
 impl BookState {
-    pub fn update_from_orderbook<T>(mut self, orderbook_update: &T) -> Self {
+    pub fn update_from_orderbook<T>(self, _orderbook_update: &T) -> Self {
         // self.timestamp = Some(orderbook_update.timestamp);
         self
     }

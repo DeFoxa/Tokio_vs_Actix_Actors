@@ -1,7 +1,7 @@
 use crate::schema::{binancepartialbook, binancetrades};
-use diesel::sql_types::{Bool, Float8, Int4, Int8, Jsonb, Nullable, VarChar};
-use diesel::Expression;
-use diesel::{Insertable, Queryable, Table};
+
+
+use diesel::{Insertable, Queryable};
 use serde_json::Value as JsonValue;
 
 #[derive(Queryable, Debug)]

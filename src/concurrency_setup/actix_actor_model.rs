@@ -1,19 +1,15 @@
 use crate::{
-    models::{BinancePartialBookModelInsertable, BinanceTradesModel, BinanceTradesNewModel},
+    models::{BinancePartialBookModelInsertable, BinanceTradesNewModel},
     schema::{
-        binancepartialbook, binancepartialbook::dsl::*, binancetrades, binancetrades::dsl::*,
+        binancepartialbook, binancetrades,
     },
     types::*,
-    utils::*,
 };
 use actix::prelude::*;
 use anyhow::Result;
 use diesel::{
-    insertable::CanInsertInSingleQuery,
-    pg::Pg,
     pg::PgConnection,
     prelude::*,
-    query_builder::QueryId,
     r2d2::{ConnectionManager, Pool},
 };
 use std::{
@@ -21,11 +17,10 @@ use std::{
     collections::BinaryHeap,
     fmt,
     fmt::{Debug, Display},
-    sync::Arc,
     time::{Duration, Instant},
 };
-use tracing::{event, info, instrument, Level};
-use tracing_subscriber::prelude::*;
+use tracing::{instrument};
+
 //
 // TODO: Fix the unnecessary clones tomorrow
 //
@@ -65,7 +60,7 @@ impl Handler<TradeStreamDBMessage<BinanceTradesNewModel>> for TradeStreamDBActor
     ) -> Self::Result {
         let db_model = msg.data.to_db_model();
         let mut conn = self.pool.get().expect("failed to connect to db pool");
-        let entry = diesel::insert_into(binancetrades::table)
+        let _entry = diesel::insert_into(binancetrades::table)
             .values(db_model)
             .execute(&mut conn)?;
         Ok(())
@@ -100,7 +95,7 @@ impl Handler<BookModelDbMessage<BinancePartialBookModelInsertable>> for BookMode
     ) -> Self::Result {
         let db_model = msg.data.to_db_model();
         let mut conn = self.pool.get().expect("failed to connect to db pool");
-        let entry = diesel::insert_into(binancepartialbook::table)
+        let _entry = diesel::insert_into(binancepartialbook::table)
             .values(db_model)
             .execute(&mut conn)?;
         Ok(())
