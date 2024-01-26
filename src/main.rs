@@ -54,15 +54,17 @@ async fn main() -> Result<()> {
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
     tracing_subscriber::fmt().with_writer(non_blocking).init();
 
-    let matching_engine_sender = MatchingEngineHandler::new()?;
-    let (sequencer_sender, _sequencer_receiver) = mpsc::channel::<SM>(32);
+    //
+    // let (state_sender, state_receiver) = mpsc::channel::<StateManagementMessage>(32);
+    // let (timer_sender, timer_receiver) = mpsc::channel::<SM>(32);
 
-    let (state_sender, state_receiver) = mpsc::channel::<StateManagementMessage>(32);
-    let (timer_sender, timer_receiver) = mpsc::channel::<SM>(32);
-
-    let (seq_handler, seq_sender) = SequencerHandler::new(matching_engine_sender).await?;
-    let trade_stream_handler = TradeStreamActorHandler::new(seq_sender.clone()).await;
-    let order_book_handler = OrderBookActorHandler::new(seq_sender).await;
+    let (matching_engine_sender, matching_engine_handle) = MatchingEngineHandler::new()?;
+    let (sequencer_sender, sequencer_handle) =
+        SequencerHandler::new(matching_engine_sender).await?;
+    let (trade_stream_sender, trade_stream_handle) =
+        TradeStreamActorHandler::new(sequencer_sender.clone()).await?;
+    let (order_book_sender, order_book_handle) =
+        OrderBookActorHandler::new(sequencer_sender).await?;
 
     let trade_data = BinanceTrades {
         event_type: "aggTrade".to_string(),
@@ -96,9 +98,16 @@ async fn main() -> Result<()> {
         ],
     };
     let test_ob = OBSM { data: ob_data };
-    trade_stream_handler.send(test_trade).await?;
-    order_book_handler.send(test_ob).await?;
+    trade_stream_sender.send(test_trade).await?;
+    order_book_sender.send(test_ob).await?;
+    let _ = tokio::join!(
+        matching_engine_handle,
+        sequencer_handle,
+        trade_stream_handle,
+        order_book_handle
+    );
     //testing to determine why runtime is exiting early
+    //
     // loop {
     //     tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
     // }

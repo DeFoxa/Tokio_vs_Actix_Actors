@@ -8,6 +8,7 @@ use std::fmt::{Debug, Display};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
+use tokio::task::JoinHandle;
 use tokio::time::{Duration as TD, Interval};
 use tracing::{event, info, instrument, Level};
 use tracing_subscriber::prelude::*;
@@ -58,15 +59,17 @@ where
     sender: mpsc::Sender<TradeStreamMessage<T>>,
 }
 impl<T: ToTakerTrades + Send + Sync + 'static> TradeStreamActorHandler<T> {
-    pub async fn new(sequencer_sender: mpsc::Sender<SequencerMessage>) -> Self {
+    pub async fn new(
+        sequencer_sender: mpsc::Sender<SequencerMessage>,
+    ) -> Result<(Self, JoinHandle<()>)> {
         let (sender, receiver) = mpsc::channel(32);
         let actor = TradeStreamActor::new(receiver, sequencer_sender);
-        tokio::spawn(async move {
+        let trade_stream_handle = tokio::spawn(async move {
             tracing::info!("tokio::spawn, run trade actor");
             run_trade_actor(actor.await).await;
         });
 
-        Self { sender }
+        Ok((Self { sender }, trade_stream_handle))
     }
 
     pub async fn send(
@@ -124,14 +127,17 @@ where
     sender: mpsc::Sender<OrderBookStreamMessage<T>>,
 }
 impl<T: ToBookModels + Send + Sync + 'static> OrderBookActorHandler<T> {
-    pub async fn new(sequencer_sender: mpsc::Sender<SequencerMessage>) -> Self {
+    pub async fn new(
+        sequencer_sender: mpsc::Sender<SequencerMessage>,
+    ) -> Result<(Self, JoinHandle<()>)> {
         let (sender, receiver) = mpsc::channel(32);
         let actor = OrderBookActor::new(receiver, sequencer_sender);
-        tokio::spawn(async move {
+        let order_book_handle = tokio::spawn(async move {
             tracing::info!("tokio::spawn, run ob actor");
             run_book_actor(actor.await);
         });
-        Self { sender }
+
+        Ok((Self { sender }, order_book_handle))
     }
     pub async fn send(
         &self,
@@ -392,7 +398,7 @@ pub struct SequencerHandler;
 impl SequencerHandler {
     pub async fn new(
         matching_engine_sender: mpsc::Sender<MatchingEngineMessage>,
-    ) -> Result<(Self, mpsc::Sender<SequencerMessage>)> {
+    ) -> Result<(mpsc::Sender<SequencerMessage>, JoinHandle<()>)> {
         // NOTE, for later reference: centralized instantiator of all sequencer channels,
         // includign timer. This method will be called from main() or whatever other function
         // handles the actor system. ruN_timer() should be called from sequenceractor run(), with
@@ -416,7 +422,7 @@ impl SequencerHandler {
             receiver: timer_receiver,
             state_management_sender: state_sender,
         };
-        tokio::spawn(async move {
+        let sequencer_actor_handle = tokio::spawn(async move {
             match sequencer_actor.run().await {
                 Ok(_) => tracing::info!("spawn SequencerActor successfully"),
                 Err(_) => tracing::debug!("Error spawning SequencerActor"),
@@ -429,7 +435,7 @@ impl SequencerHandler {
                 Err(_) => tracing::debug!("error spawning TimerActor"),
             }
         });
-        Ok((SequencerHandler {}, sequencer_sender))
+        Ok((sequencer_sender, sequencer_actor_handle))
     }
     // pub async fn send(&self, msg: SequencerMessage) -> Result<()> {
     //     self.sequencer_sender.send(msg).await?;
@@ -465,11 +471,11 @@ pub enum MatchingEngineMessage {
 #[derive(Debug)]
 pub struct MatchingEngineHandler;
 impl MatchingEngineHandler {
-    pub fn new() -> Result<mpsc::Sender<MatchingEngineMessage>> {
+    pub fn new() -> Result<(mpsc::Sender<MatchingEngineMessage>, JoinHandle<()>)> {
         let (sender, receiver) = mpsc::channel(32);
         let mut mea = MatchingEngineActor { receiver };
 
-        tokio::spawn(async move {
+        let matching_engine_handle = tokio::spawn(async move {
             mea.run().await.expect("panic");
             // match mea.run().await {
             //     Ok(_) => tracing::info!("MatchingEngineActor spawn success"),
@@ -477,7 +483,7 @@ impl MatchingEngineHandler {
             // }
         });
 
-        Ok(sender)
+        Ok((sender, matching_engine_handle))
     }
 }
 
