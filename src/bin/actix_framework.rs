@@ -1,4 +1,5 @@
 #![allow(warnings)]
+#[allow(unused_must_use)]
 use diesel::{prelude::*, PgConnection};
 use dotenvy::dotenv;
 use lib::concurrency_setup::actix_actor_model::*;

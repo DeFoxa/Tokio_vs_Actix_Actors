@@ -1,17 +1,11 @@
-use crate::{types::*};
+#[allow(unused)]
+#[allow(unused_must_use)]
+use crate::types::*;
 use anyhow::Result;
 use std::collections::VecDeque;
-use std::{
-    fmt::{Debug},
-    sync::Arc,
-    time::{Duration},
-};
-use tokio::{
-    sync::mpsc,
-    task::JoinHandle,
-};
-use tracing::{instrument};
-
+use std::{fmt::Debug, sync::Arc, time::Duration};
+use tokio::{sync::mpsc, task::JoinHandle};
+use tracing::instrument;
 
 ///
 /// Trade Stream Actor
@@ -278,8 +272,8 @@ impl SequencerActor {
 
                             }
                             SequencerMessage::BookModelUpdate(sequencer_msg) => {
-                                self.timer_sender.send(SequencerMessage::BookModelUpdate(sequencer_msg));
-                                self.state_update
+                                 self.timer_sender.send(SequencerMessage::BookModelUpdate(sequencer_msg));
+                                 self.state_update
                                     .send(StateManagementMessage::ResumeProcessing).await;
                                 tracing::info!("sequencer run: book_model_update")
                             }
@@ -309,7 +303,7 @@ impl SequencerActor {
                 }
             }
         }
-        Ok(())
+        // Ok(())
     }
 
     pub async fn process_queue(&mut self, ob_update_timestamp: SequencerMessage) {
@@ -344,7 +338,7 @@ impl SequencerActor {
                 .await;
         }
         if self.queue.len() == 0 {
-            self.sequencer_state = SequencerState::Processing;
+            let _ = self.sequencer_state = SequencerState::Processing;
         }
     }
 }
