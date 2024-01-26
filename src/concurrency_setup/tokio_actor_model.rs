@@ -1,18 +1,23 @@
-use crate::types::*;
-use crate::utils::*;
+use crate::{types::*, utils::*};
 use anyhow::Result;
-use std::cmp::Ordering;
 use std::collections::VecDeque;
-use std::fmt;
-use std::fmt::{Debug, Display};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, oneshot};
-use tokio::task::JoinHandle;
-use tokio::time::{Duration as TD, Interval};
+use std::{
+    fmt,
+    fmt::{Debug, Display},
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use tokio::{
+    sync::mpsc,
+    task::JoinHandle,
+    time::{Duration as TD, Interval},
+};
 use tracing::{event, info, instrument, Level};
 use tracing_subscriber::prelude::*;
 
+///
+/// Trade Stream Actor
+///
 #[derive(Debug, Clone)]
 pub struct TradeStreamMessage<T>
 where
@@ -88,6 +93,10 @@ async fn run_trade_actor<T: ToTakerTrades + Send + Sync>(
     }
     Ok(())
 }
+
+///
+/// OrderBook Actor
+///
 #[derive(Debug)]
 pub struct OrderBookStreamMessage<T>
 where
@@ -155,10 +164,6 @@ pub async fn run_book_actor<T: ToBookModels + Send + Sync>(
     }
     Ok(())
 }
-
-//
-// SEQUENCER
-//
 // Sequencer Thread NOTE:
 //
 // The sequencer thread handles ordering of two message types(this may grow
@@ -177,6 +182,9 @@ pub async fn run_book_actor<T: ToBookModels + Send + Sync>(
 // Eventually instead of processing pauses, I'll add the GET requests to fill in ob state but for
 // now pauses are fine
 
+///
+/// SEQUENCER
+///
 #[derive(Debug)]
 pub enum SequencerState {
     Processing,
@@ -437,16 +445,11 @@ impl SequencerHandler {
         });
         Ok((sequencer_sender, sequencer_actor_handle))
     }
-    // pub async fn send(&self, msg: SequencerMessage) -> Result<()> {
-    //     self.sequencer_sender.send(msg).await?;
-    //     Ok(())
-    // }
 }
 
-//
-// MATCHING ENGINE
-//
-
+///
+/// MATCHING ENGINE
+///
 #[derive(Debug)]
 pub struct MatchingEngineActor {
     pub receiver: mpsc::Receiver<MatchingEngineMessage>,
@@ -476,134 +479,12 @@ impl MatchingEngineHandler {
         let mut mea = MatchingEngineActor { receiver };
 
         let matching_engine_handle = tokio::spawn(async move {
-            mea.run().await.expect("panic");
-            // match mea.run().await {
-            //     Ok(_) => tracing::info!("MatchingEngineActor spawn success"),
-            //     Err(_) => tracing::debug!("Error spawning MatchingEngineActor"),
-            // }
+            match mea.run().await {
+                Ok(_) => tracing::info!("MatchingEngineActor spawn success"),
+                Err(_) => tracing::debug!("Error spawning MatchingEngineActor"),
+            }
         });
 
         Ok((sender, matching_engine_handle))
     }
 }
-
-//OLD SEQUENCER_STATE_ACTOR
-//
-// pub struct SequencerStateActor {
-//     receiver: mpsc::Receiver<StateManagementMessage>,
-//     timer_sender: mpsc::Sender<()>,
-//     state: SequencerState,
-// }
-// impl SequencerStateActor {
-//     fn new(
-//         receiver: mpsc::Receiver<StateManagementMessage>,
-//         timer_sender: mpsc::Sender<()>,
-//     ) -> Self {
-//         SequencerStateActor {
-//             receiver,
-//             timer_sender,
-//             state: SequencerState::Processing,
-//         }
-//     }
-//     async fn run(&mut self, msg: StateManagementMessage) {
-//         match msg {
-//             StateManagementMessage::Processing => {
-//                 self.state = SequencerState::to_processing();
-//             }
-//             StateManagementMessage::PauseProcessing => {
-//                 self.state = SequencerState::to_pause_processing();
-//             }
-//             StateManagementMessage::ResumeProcessing => {
-//                 self.state = SequencerState::to_resume_proceessing();
-//             }
-//         }
-//     }
-// }
-//
-// OLD SEQUENCER RUn
-// match self.sequencer_state {
-//     SequencerState::Processing => {
-//         self.handle_message(message);
-//         // not adding a log::info! message for standard processing for time being, only want
-//         // to see non standard scenarios in logs
-//     }
-//     SequencerState::PauseProcessing => match message {
-//         SequencerMessage::TakerTrade(message) => {
-//             self.queue.push_back(message);
-//             log::info!("processing pause trade message sent to queue");
-//         }
-//         SequencerMessage::BookModelUpdate(message) => {
-//             self.state_receiver
-//                 .send(StateManagementMessage::ResumeProcessing);
-//             log::info!("sequencer run: book_model_update")
-//         }
-//     },
-//     SequencerState::ResumeProcessing => {
-//         self.process_queue(message);
-//         log::info!(
-//             "resume process from run, state should update from StateManagement, verify"
-//         );
-//     }
-// }
-
-//OLD RUN
-// loop {
-//     tokio::select! {
-//         Some(message) = self.receiver.recv() => {
-//             match message {
-//                 SequencerMessage::TakerTrade => {
-//                     self.handle_message(message)
-//                 }
-//                 SequencerMessage::BookModelUpdate {
-//                     log::info!("state_management will handle updated")
-//                 }
-//             }
-//
-//
-//         }
-//         Some(state_message) = self.state_receiver.recv() =>  {
-//             match state_message {
-//                 StateManagementMessage::Processing => {
-//                     self.is_processing_paused = false;
-//                 }
-//                 StateManagementMessage::PauseProcessing => {
-//                     self.is_processing_paused = true;
-//                 }
-//                 StateManagementMessage::ResumeProcessing => {
-//                     self.is_processing_paused = false;
-//                     while let Some(queued_message) = self.queue.pop_front() {
-//                         self.process_queue(queued_message).await;
-//                     }
-//                 }
-//             }
-//
-//         }
-//     }
-// }
-
-//
-// QUEUED MESSAGE TYPES FOR SEQUENCER - Old Code
-//
-// #[derive(Debug, PartialEq, Eq)]
-// pub struct SequencerMessageWrapper {
-//     pub message: SequencerMessage,
-// }
-//
-// #[derive(Debug, Eq, PartialEq)]
-// pub struct QueuedMessages
-// // where
-// //     T: Eq + PartialEq,
-// {
-//     pub timestamp: Instant,
-//     pub message: SequencerMessage,
-// }
-// impl Ord for QueuedMessages {
-//     fn cmp(&self, other: &Self) -> Ordering {
-//         other.timestamp.cmp(&self.timestamp)
-//     }
-// }
-// impl PartialOrd for QueuedMessages {
-//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-//         Some(self.cmp(other))
-//     }
-// }

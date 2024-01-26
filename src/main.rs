@@ -1,12 +1,4 @@
 #![allow(warnings)]
-mod client;
-mod concurrency_setup;
-pub mod models;
-mod ob_model;
-pub mod schema;
-pub mod types;
-mod utils;
-
 use crate::concurrency_setup::actix_actor_model::*;
 use crate::concurrency_setup::tokio_actor_model::{
     MatchingEngineActor as MEA, MatchingEngineHandler, MatchingEngineMessage,
@@ -15,12 +7,10 @@ use crate::concurrency_setup::tokio_actor_model::{
     TradeStreamMessage as TSM,
 };
 use concurrency_setup::tokio_actor_model::TradeStreamActorHandler;
-use diesel::prelude::*;
-use diesel::PgConnection;
+use diesel::{prelude::*, PgConnection};
 use dotenvy::dotenv;
 use schema::binancetrades::dsl::*;
-use std::collections::BinaryHeap;
-use std::env;
+use std::{collections::BinaryHeap, env};
 use tracing_subscriber::Layer;
 use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*, registry::Registry};
 
@@ -32,16 +22,23 @@ use crate::{
 use actix::prelude::*;
 use actix_rt::{task::spawn_blocking, Arbiter, System};
 use anyhow::Result;
-use concurrency_setup::*;
 use futures_util::{Stream, StreamExt};
 use models::BinanceTradesNewModel;
 use serde_json::Value;
-// use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::tungstenite::Message;
 use tracing_flame::FlameLayer;
-//TODO: Fix the clones in actor_model
+
+mod client;
+mod concurrency_setup;
+pub mod models;
+mod ob_model;
+pub mod schema;
+pub mod types;
+mod utils;
+
+//TODO: Fix the unnecessary clones in actix_actor_model
 
 pub const MAINNET: &str = "wss://fstream.binance.com";
 
@@ -53,10 +50,6 @@ async fn main() -> Result<()> {
 
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
     tracing_subscriber::fmt().with_writer(non_blocking).init();
-
-    //
-    // let (state_sender, state_receiver) = mpsc::channel::<StateManagementMessage>(32);
-    // let (timer_sender, timer_receiver) = mpsc::channel::<SM>(32);
 
     let (matching_engine_sender, matching_engine_handle) = MatchingEngineHandler::new()?;
     let (sequencer_sender, sequencer_handle) =
@@ -100,23 +93,13 @@ async fn main() -> Result<()> {
     let test_ob = OBSM { data: ob_data };
     trade_stream_sender.send(test_trade).await?;
     order_book_sender.send(test_ob).await?;
+
     let _ = tokio::join!(
         matching_engine_handle,
         sequencer_handle,
         trade_stream_handle,
         order_book_handle
     );
-    //testing to determine why runtime is exiting early
-    //
-    // loop {
-    //     tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-    // }
-    // let matching = MEA::new(SequencerMessage::TakerTrade);
-    // let (trade_sender, trade_receiver) = mpsc::channel(32);
-    // let (seq_sender, seq_receiver) = mpsc::channel(32);
-    // let seq_actor = SA::new(seq_receiver, matching);
-    // tokio::spawn(async move { seq_actor.run().await });
-
     Ok(())
 }
 
@@ -127,15 +110,6 @@ fn establish_connection() -> PgConnection {
     PgConnection::establish(&database_url)
         .unwrap_or_else(|_| panic!("error connecting to DB: {}", database_url))
 }
-
-// #[tokio::main]
-// async fn _main() -> Result<()> {
-//     Ok(())
-// }
-
-//
-//Combined connection book
-//
 
 async fn book_data_to_db() -> Result<()> {
     let pool = create_db_pool();
@@ -250,6 +224,7 @@ async fn stream_data_to_matching_engine() -> Result<()> {
     .await;
     Ok(())
 }
+
 //single ws connection
 async fn trade_stream_connection() -> Result<()> {
     let (mut ws_state, Response) =
@@ -272,6 +247,7 @@ async fn trade_stream_connection() -> Result<()> {
     .await;
     Ok(())
 }
+
 async fn book_stream_connection() -> Result<()> {
     let (mut ws_state, Response) =
         Client::connect_with_stream_name(&StreamNameGenerator::partial_book("ethusdt", "10").await)
@@ -294,36 +270,20 @@ async fn book_stream_connection() -> Result<()> {
     .await;
     Ok(())
 }
-// async fn inst_sequence_addr() -> Result<SequenceActor> {
-//     let matching_engine_addr = MatchingEngineActor { data: 1 }.start();
-//      let sequencer_addr = SequencerActor {
-//         queue: BinaryHeap::new(),
-//         matching_engine_addr,
-//         last_ob_update: Instant::now(),
-//         is_processing_paused: false,
-//     }.start();
-//      Ok(sequence_addr)
-// }
-// DATABASE TESTING CODE
-// let test = BinanceTradesModel {
-//        id: 1,
-//        event_type: Some("testing".to_string()),
-//        event_time: Some(1234),
-//        symbol: Some("TEST_BTC".to_string()),
-//        aggegate_id: Some(1),
-//        price: Some(46999.01),
-//        quantity: Some(1.0),
-//        first_trade_id: Some(2),
-//        last_trade_id: Some(4),
-//        trade_timestamp: Some(56789),
-//        is_buyer_mm: Some(false),
-//    };
-//    let connection = &mut establish_connection;
-//    let entry = diesel::insert_into(binancetrades)
-//        .values(test)
-//        .execute(&mut connection())?;
-//
 
+async fn inst_sequencer_addr() -> Result<Addr<SequencerActor>> {
+    let matching_engine_addr = MatchingEngineActor { data: 1 }.start();
+    let sequencer_addr = SequencerActor {
+        queue: BinaryHeap::new(),
+        matching_engine_addr,
+        last_ob_update: Instant::now(),
+        is_processing_paused: false,
+    }
+    .start();
+    Ok(sequencer_addr)
+}
+
+//
 // Tracing Flamegraph implementation for use in fn main
 // let fmt_layer: tracing_subscriber::fmt::Layer<Registry> = fmt::Layer::default();
 // let (flame_layer, _guard) = FlameLayer::with_file("./tracing.folded").unwrap();
