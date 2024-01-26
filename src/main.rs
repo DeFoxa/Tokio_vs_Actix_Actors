@@ -50,56 +50,56 @@ async fn main() -> Result<()> {
 
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
     tracing_subscriber::fmt().with_writer(non_blocking).init();
-
-    let (matching_engine_sender, matching_engine_handle) = MatchingEngineHandler::new()?;
-    let (sequencer_sender, sequencer_handle) =
-        SequencerHandler::new(matching_engine_sender).await?;
-    let (trade_stream_sender, trade_stream_handle) =
-        TradeStreamActorHandler::new(sequencer_sender.clone()).await?;
-    let (order_book_sender, order_book_handle) =
-        OrderBookActorHandler::new(sequencer_sender).await?;
-
-    let trade_data = BinanceTrades {
-        event_type: "aggTrade".to_string(),
-        event_time: 1705537089147,
-        symbol: "BTCUSDT".to_string(),
-        aggegate_id: 1991573987,
-        price: 42666.7,
-        quantity: 0.001,
-        first_trade_id: 4502236286,
-        last_trade_id: 4502236286,
-        trade_timestamp: 1705537090087,
-        is_buyer_mm: false,
-    };
-    let test_trade = TSM { data: trade_data };
-    let ob_data = BinancePartialBook {
-        depth_update: "depthUpdate".to_string(),
-        event_timestamp: 1705595381665,
-        timestamp: 1705595381665,
-        symbol: "BTCUSDT".to_string(),
-        first_update_id: 1705595381665,
-        final_update_id: 1705595381665,
-        final_update_id_last_stream: 1705595381665,
-        bids: vec![
-            ["2510.18".to_string(), "28.709".to_string()],
-            ["2510.18".to_string(), "28.709".to_string()],
-        ],
-
-        asks: vec![
-            ["2510.18".to_string(), "28.709".to_string()],
-            ["2510.18".to_string(), "28.709".to_string()],
-        ],
-    };
-    let test_ob = OBSM { data: ob_data };
-    trade_stream_sender.send(test_trade).await?;
-    order_book_sender.send(test_ob).await?;
-
-    let _ = tokio::join!(
-        matching_engine_handle,
-        sequencer_handle,
-        trade_stream_handle,
-        order_book_handle
-    );
+    stream_data_to_tokio_matching_engine().await?;
+    // let (matching_engine_sender, matching_engine_handle) = MatchingEngineHandler::new()?;
+    // let (sequencer_sender, sequencer_handle) =
+    //     SequencerHandler::new(matching_engine_sender).await?;
+    // let (trade_stream_sender, trade_stream_handle) =
+    //     TradeStreamActorHandler::new(sequencer_sender.clone()).await?;
+    // let (order_book_sender, order_book_handle) =
+    //     OrderBookActorHandler::new(sequencer_sender).await?;
+    //
+    // let trade_data = BinanceTrades {
+    //     event_type: "aggTrade".to_string(),
+    //     event_time: 1705537089147,
+    //     symbol: "BTCUSDT".to_string(),
+    //     aggegate_id: 1991573987,
+    //     price: 42666.7,
+    //     quantity: 0.001,
+    //     first_trade_id: 4502236286,
+    //     last_trade_id: 4502236286,
+    //     trade_timestamp: 1705537090087,
+    //     is_buyer_mm: false,
+    // };
+    // let test_trade = TSM { data: trade_data };
+    // let ob_data = BinancePartialBook {
+    //     depth_update: "depthUpdate".to_string(),
+    //     event_timestamp: 1705595381665,
+    //     timestamp: 1705595381665,
+    //     symbol: "BTCUSDT".to_string(),
+    //     first_update_id: 1705595381665,
+    //     final_update_id: 1705595381665,
+    //     final_update_id_last_stream: 1705595381665,
+    //     bids: vec![
+    //         ["2510.18".to_string(), "28.709".to_string()],
+    //         ["2510.18".to_string(), "28.709".to_string()],
+    //     ],
+    //
+    //     asks: vec![
+    //         ["2510.18".to_string(), "28.709".to_string()],
+    //         ["2510.18".to_string(), "28.709".to_string()],
+    //     ],
+    // };
+    // let test_ob = OBSM { data: ob_data };
+    // trade_stream_sender.send(test_trade).await?;
+    // order_book_sender.send(test_ob).await?;
+    //
+    // let _ = tokio::join!(
+    //     matching_engine_handle,
+    //     sequencer_handle,
+    //     trade_stream_handle,
+    //     order_book_handle
+    // );
     Ok(())
 }
 
@@ -165,7 +165,7 @@ async fn book_data_to_db() -> Result<()> {
 // COMBINED
 //
 
-async fn stream_data_to_matching_engine() -> Result<()> {
+async fn stream_data_to_actix_matching_engine() -> Result<()> {
     let matching_engine_addr = MatchingEngineActor { data: 1 }.start();
     let seq_addr = SequencerActor {
         queue: BinaryHeap::new(),
@@ -222,6 +222,62 @@ async fn stream_data_to_matching_engine() -> Result<()> {
         }
     })
     .await;
+    Ok(())
+}
+
+async fn stream_data_to_tokio_matching_engine() -> Result<()> {
+    let (matching_engine_sender, matching_engine_handle) = MatchingEngineHandler::new()?;
+    let (sequencer_sender, sequencer_handle, timer_handle) =
+        SequencerHandler::new(matching_engine_sender)?;
+    let (trade_stream_sender, trade_stream_handle) =
+        TradeStreamActorHandler::new(sequencer_sender.clone())?;
+    let (order_book_sender, order_book_handle) = OrderBookActorHandler::new(sequencer_sender)?;
+
+    let (mut ws_state, Response) = Client::connect_combined_async(
+        MAINNET,
+        vec![
+            &StreamNameGenerator::combined_stream_partial_book("ethusdt", "10").await,
+            &StreamNameGenerator::combined_stream_trades_by_symbol("ethusdt").await,
+        ],
+    )
+    .await?;
+
+    let (write, read) = ws_state.socket.split();
+    read.for_each(|message| async {
+        match message {
+            Ok(Message::Text(text)) => {
+                let value: Value = serde_json::from_str(&text).expect("some error 1");
+                let other_event_type = value.get("e").and_then(Value::as_str);
+                match other_event_type {
+                    Some("aggTrade") => {
+                        let trades = serde_json::from_value::<BinanceTrades>(value.clone())
+                            .expect("error deserializing to binancetrades");
+
+                        trade_stream_sender.send(TSM { data: trades }).await;
+                    }
+                    Some("depthUpdate") => {
+                        let book = serde_json::from_value::<BinancePartialBook>(value.clone())
+                            .expect("error deserializing to PartialBook");
+                        order_book_sender.send(OBSM { data: book }).await;
+                        // println!("{:?}", &book);
+                    }
+                    _ => {
+                        eprintln!("Error matching deserialized fields, no aggTrade or depthUpdate");
+                    }
+                }
+            }
+            _ => (),
+        }
+    })
+    .await;
+    let _ = tokio::join!(
+        matching_engine_handle,
+        sequencer_handle,
+        trade_stream_handle,
+        order_book_handle,
+        timer_handle,
+    );
+
     Ok(())
 }
 

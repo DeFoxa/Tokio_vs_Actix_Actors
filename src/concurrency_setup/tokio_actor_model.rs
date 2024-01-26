@@ -36,7 +36,7 @@ where
 }
 
 impl<T: ToTakerTrades + Send + Sync + 'static> TradeStreamActor<T> {
-    async fn new(
+    fn new(
         receiver: mpsc::Receiver<TradeStreamMessage<T>>,
         sequencer_sender: mpsc::Sender<SequencerMessage>,
     ) -> Self {
@@ -45,9 +45,9 @@ impl<T: ToTakerTrades + Send + Sync + 'static> TradeStreamActor<T> {
             sequencer_sender,
         }
     }
+
     async fn handle_message(&mut self, msg: TradeStreamMessage<T>) -> Result<()> {
         let sequencer_message = SequencerMessage::TakerTrade(msg.data.to_trades_type()?);
-
         self.sequencer_sender
             .send(sequencer_message.clone())
             .await?;
@@ -64,14 +64,12 @@ where
     sender: mpsc::Sender<TradeStreamMessage<T>>,
 }
 impl<T: ToTakerTrades + Send + Sync + 'static> TradeStreamActorHandler<T> {
-    pub async fn new(
-        sequencer_sender: mpsc::Sender<SequencerMessage>,
-    ) -> Result<(Self, JoinHandle<()>)> {
+    pub fn new(sequencer_sender: mpsc::Sender<SequencerMessage>) -> Result<(Self, JoinHandle<()>)> {
         let (sender, receiver) = mpsc::channel(32);
         let actor = TradeStreamActor::new(receiver, sequencer_sender);
         let trade_stream_handle = tokio::spawn(async move {
             tracing::info!("tokio::spawn, run trade actor");
-            run_trade_actor(actor.await).await;
+            run_trade_actor(actor).await;
         });
 
         Ok((Self { sender }, trade_stream_handle))
@@ -113,7 +111,7 @@ where
     pub sequencer_sender: mpsc::Sender<SequencerMessage>,
 }
 impl<T: ToBookModels + Send + Sync + 'static> OrderBookActor<T> {
-    async fn new(
+    fn new(
         receiver: mpsc::Receiver<OrderBookStreamMessage<T>>,
         sequencer_sender: mpsc::Sender<SequencerMessage>,
     ) -> Self {
@@ -124,6 +122,7 @@ impl<T: ToBookModels + Send + Sync + 'static> OrderBookActor<T> {
     }
     async fn handle_message(&mut self, msg: OrderBookStreamMessage<T>) -> Result<()> {
         let sequencer_message = SequencerMessage::BookModelUpdate(msg.data.to_book_model()?);
+
         self.sequencer_sender.send(sequencer_message).await?;
         Ok(())
     }
@@ -136,14 +135,12 @@ where
     sender: mpsc::Sender<OrderBookStreamMessage<T>>,
 }
 impl<T: ToBookModels + Send + Sync + 'static> OrderBookActorHandler<T> {
-    pub async fn new(
-        sequencer_sender: mpsc::Sender<SequencerMessage>,
-    ) -> Result<(Self, JoinHandle<()>)> {
+    pub fn new(sequencer_sender: mpsc::Sender<SequencerMessage>) -> Result<(Self, JoinHandle<()>)> {
         let (sender, receiver) = mpsc::channel(32);
         let actor = OrderBookActor::new(receiver, sequencer_sender);
         let order_book_handle = tokio::spawn(async move {
             tracing::info!("tokio::spawn, run ob actor");
-            run_book_actor(actor.await);
+            run_book_actor(actor).await;
         });
 
         Ok((Self { sender }, order_book_handle))
@@ -216,7 +213,7 @@ pub struct SequencerActor {
     timer_sender: mpsc::Sender<SequencerMessage>,
     matching_engine_actor: mpsc::Sender<MatchingEngineMessage>,
     pub queue: VecDeque<TakerTrades>,
-    sequencer_state: SequencerState,
+    pub sequencer_state: SequencerState,
 }
 
 impl SequencerActor {
@@ -249,6 +246,7 @@ impl SequencerActor {
                 MatchingEngineMessage::BookModelUpdate(book_update)
             }
         };
+
         tracing::info!("state {:?}", self.sequencer_state);
         self.matching_engine_actor.send(matching_engine_msg).await;
     }
@@ -261,8 +259,9 @@ impl SequencerActor {
                         SequencerState::Processing => {
                             match sequencer_msg {
                                 SequencerMessage::BookModelUpdate(ref book_update) => {
-                                    tracing::info!("SequencerActor::run(): {:?}", sequencer_msg.clone());
-                                    self.timer_sender.send(SequencerMessage::BookModelUpdate(book_update.clone())).await?;
+
+                                     self.timer_sender.send(SequencerMessage::BookModelUpdate(book_update.clone())).await?;
+                                     tracing::info!("SequencerActor::run(): {:?}", sequencer_msg.clone());
                                     self.handle_message(SequencerMessage::BookModelUpdate(book_update.clone())).await;
                                 }
                                 _ => {
@@ -276,11 +275,12 @@ impl SequencerActor {
                         }
                         SequencerState::PauseProcessing => match sequencer_msg {
                             SequencerMessage::TakerTrade(sequencer_msg) => {
-
                                 self.queue.push_back(sequencer_msg);
                                 tracing::info!("processing pause trade message sent to queue");
+
                             }
                             SequencerMessage::BookModelUpdate(sequencer_msg) => {
+                                self.timer_sender.send(SequencerMessage::BookModelUpdate(sequencer_msg));
                                 self.state_update
                                     .send(StateManagementMessage::ResumeProcessing).await;
                                 tracing::info!("sequencer run: book_model_update")
@@ -333,11 +333,20 @@ impl SequencerActor {
             Err(index) => index,
         };
 
+        tracing::info!(
+            "**queue** {}, process {:?}",
+            self.queue.clone().len(),
+            self.sequencer_state
+        );
+
         for message in self.queue.drain(..index) {
             let matching_engine_message = MatchingEngineMessage::TakerTrade(Arc::new(message));
             self.matching_engine_actor
                 .send(matching_engine_message)
                 .await;
+        }
+        if self.queue.len() == 0 {
+            self.sequencer_state = SequencerState::Processing;
         }
     }
 }
@@ -382,16 +391,20 @@ impl TimerActor {
             tokio::select! {
                 Some(msg) = self.receiver.recv() => {
                     match msg {
-                        SequencerMessage::BookModelUpdate(_) => {
+                        SequencerMessage::BookModelUpdate(msg) => {
                             interval.reset();
+                            tracing::info!("interval reset");
                         }
+
                         _ => log::debug!("Incorrect SequencerMessage type being passed to timer"),
+
                     }
                 }
                 _ = interval.tick() => {
                     self.state_management_sender
                         .send(StateManagementMessage::PauseProcessing)
                         .await?;
+                    tracing::info!("Pause Processing From TimerActor");
                 }
             }
         }
@@ -404,9 +417,13 @@ impl TimerActor {
 pub struct SequencerHandler;
 
 impl SequencerHandler {
-    pub async fn new(
+    pub fn new(
         matching_engine_sender: mpsc::Sender<MatchingEngineMessage>,
-    ) -> Result<(mpsc::Sender<SequencerMessage>, JoinHandle<()>)> {
+    ) -> Result<(
+        mpsc::Sender<SequencerMessage>,
+        JoinHandle<()>,
+        JoinHandle<()>,
+    )> {
         // NOTE, for later reference: centralized instantiator of all sequencer channels,
         // includign timer. This method will be called from main() or whatever other function
         // handles the actor system. ruN_timer() should be called from sequenceractor run(), with
@@ -437,13 +454,13 @@ impl SequencerHandler {
             }
         });
 
-        tokio::spawn(async move {
+        let timer_handle = tokio::spawn(async move {
             match timer_actor.run_timer().await {
                 Ok(_) => tracing::info!("spawn TimerActor successfully"),
                 Err(_) => tracing::debug!("error spawning TimerActor"),
             }
         });
-        Ok((sequencer_sender, sequencer_actor_handle))
+        Ok((sequencer_sender, sequencer_actor_handle, timer_handle))
     }
 }
 
