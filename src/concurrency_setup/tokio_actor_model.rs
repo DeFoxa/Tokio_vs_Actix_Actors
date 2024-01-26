@@ -41,16 +41,10 @@ impl<T: ToTakerTrades + Send + Sync + 'static> TradeStreamActor<T> {
     }
     async fn handle_message(&mut self, msg: TradeStreamMessage<T>) -> Result<()> {
         let sequencer_message = SequencerMessage::TakerTrade(msg.data.to_trades_type()?);
-        // println!("SM {:?}", sequencer_message);
-        println!("test 1");
 
         self.sequencer_sender
             .send(sequencer_message.clone())
             .await?;
-        // .expect("error from trarde stream sequencer sender");
-        // println!("SM {:?}", sequencer_message.clone());
-        println!("test 2");
-        // self.sequencer_sender.send(sequencer_message).await?;
 
         Ok(())
     }
@@ -243,7 +237,6 @@ impl SequencerActor {
         };
         tracing::info!("state {:?}", self.sequencer_state);
         self.matching_engine_actor.send(matching_engine_msg).await;
-        println!("matching engine send 2");
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -261,7 +254,6 @@ impl SequencerActor {
                                 _ => {
                                     tracing::info!("SequencerActor::run(): {:?}", sequencer_msg.clone());
                                     self.handle_message(sequencer_msg.clone()).await;
-                                    println!("message from internal run looop {:?}", sequencer_msg.clone());
                                     },
 
                             }
@@ -271,7 +263,6 @@ impl SequencerActor {
                         SequencerState::PauseProcessing => match sequencer_msg {
                             SequencerMessage::TakerTrade(sequencer_msg) => {
 
-                                println!("internal loop 2 ?");
                                 self.queue.push_back(sequencer_msg);
                                 tracing::info!("processing pause trade message sent to queue");
                             }
@@ -283,7 +274,6 @@ impl SequencerActor {
                         },
                         SequencerState::ResumeProcessing => {
 
-                            println!("internal loop 3 ?");
                             self.process_queue(sequencer_msg).await;
                             tracing::info!(
                                 "Resuming process from SequencerActor::run()"
@@ -412,8 +402,8 @@ impl SequencerHandler {
         let (sequencer_sender, sequencer_receiver) = mpsc::channel::<SequencerMessage>(32);
         let (state_sender, state_receiver) = mpsc::channel::<StateManagementMessage>(32);
         let (timer_sender, timer_receiver) = mpsc::channel::<SequencerMessage>(32);
-        let (matching_engine_sender, matching_engine_receiver) =
-            mpsc::channel::<MatchingEngineMessage>(32);
+        // let (matching_engine_sender, matching_engine_receiver) =
+        //     mpsc::channel::<MatchingEngineMessage>(32);
 
         let mut sequencer_actor = SequencerActor::new(
             sequencer_receiver,
@@ -427,13 +417,17 @@ impl SequencerHandler {
             state_management_sender: state_sender,
         };
         tokio::spawn(async move {
-            println!("sequencer run?");
-            sequencer_actor.run().await.expect("SequencerActor Failed");
+            match sequencer_actor.run().await {
+                Ok(_) => tracing::info!("spawn SequencerActor successfully"),
+                Err(_) => tracing::debug!("Error spawning SequencerActor"),
+            }
         });
 
         tokio::spawn(async move {
-            timer_actor.run_timer().await.expect("TimerActor Failed");
-            println!("sequencer_actor up");
+            match timer_actor.run_timer().await {
+                Ok(_) => tracing::info!("spawn TimerActor successfully"),
+                Err(_) => tracing::debug!("error spawning TimerActor"),
+            }
         });
         Ok((SequencerHandler {}, sequencer_sender))
     }
@@ -454,8 +448,13 @@ pub struct MatchingEngineActor {
 
 impl MatchingEngineActor {
     pub async fn handle_message(&mut self, msg: MatchingEngineMessage) {
-        let message = self.receiver.recv().await;
-        println!("MATCHING ENGINE MSG {:?}", message);
+        println!("MATCHING ENGINE MSG {:?}", msg);
+    }
+    pub async fn run(&mut self) -> Result<()> {
+        while let Some(matching_engine_message) = self.receiver.recv().await {
+            self.handle_message(matching_engine_message).await;
+        }
+        Ok(())
     }
 }
 #[derive(Debug)]
@@ -464,7 +463,23 @@ pub enum MatchingEngineMessage {
     BookModelUpdate(BookModel),
 }
 #[derive(Debug)]
-pub struct MatchingEngineHandler {}
+pub struct MatchingEngineHandler;
+impl MatchingEngineHandler {
+    pub fn new() -> Result<mpsc::Sender<MatchingEngineMessage>> {
+        let (sender, receiver) = mpsc::channel(32);
+        let mut mea = MatchingEngineActor { receiver };
+
+        tokio::spawn(async move {
+            mea.run().await.expect("panic");
+            // match mea.run().await {
+            //     Ok(_) => tracing::info!("MatchingEngineActor spawn success"),
+            //     Err(_) => tracing::debug!("Error spawning MatchingEngineActor"),
+            // }
+        });
+
+        Ok(sender)
+    }
+}
 
 //OLD SEQUENCER_STATE_ACTOR
 //
