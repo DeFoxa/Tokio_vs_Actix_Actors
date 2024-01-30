@@ -28,7 +28,8 @@ use std::env;
 
 pub const MAINNET: &str = "wss://fstream.binance.com";
 
-#[tokio::main]
+// #[tokio::main]
+#[actix_rt::main]
 async fn main() -> Result<()> {
     book_data_to_db().await?;
     // todo!();

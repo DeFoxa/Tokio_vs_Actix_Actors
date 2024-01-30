@@ -67,8 +67,8 @@ async fn stream_data_to_tokio_matching_engine() -> Result<()> {
         match message {
             Ok(Message::Text(text)) => {
                 let value: Value = serde_json::from_str(&text).expect("some error 1");
-                let other_event_type = value.get("e").and_then(Value::as_str);
-                match other_event_type {
+                let event = value.get("e").and_then(Value::as_str);
+                match event {
                     Some("aggTrade") => {
                         let trades = serde_json::from_value::<BinanceTrades>(value.clone())
                             .expect("error deserializing to binancetrades");
