@@ -10,5 +10,9 @@ tokio:
 
 actix: 
 	cargo run --bin actix_framework
+
 test:
 	cargo run --bin model_testing
+
+tui:
+	cargo run --bin testing_tui 
