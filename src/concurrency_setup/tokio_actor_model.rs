@@ -3,6 +3,7 @@
 use crate::types::*;
 use anyhow::Result;
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::{fmt::Debug, sync::Arc, time::Duration};
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::instrument;
@@ -460,11 +461,20 @@ impl SequencerHandler {
 #[derive(Debug)]
 pub struct MatchingEngineActor {
     pub receiver: mpsc::Receiver<MatchingEngineMessage>,
+    pub testing_counter: AtomicU32,
 }
+
+static NEXT_ID: AtomicU32 = AtomicU32::new(1);
 
 impl MatchingEngineActor {
     pub async fn handle_message(&mut self, msg: MatchingEngineMessage) {
         println!("MATCHING ENGINE MSG {:?}", msg);
+        self.testing_counter = NEXT_ID.fetch_add(1, Ordering::Relaxed).into();
+        println!("counter {:?}", self.testing_counter);
+        tracing::info!(
+            "msg reached end of pipeline, counter {:?}",
+            self.testing_counter
+        );
     }
     pub async fn run(&mut self) -> Result<()> {
         while let Some(matching_engine_message) = self.receiver.recv().await {
@@ -483,7 +493,10 @@ pub struct MatchingEngineHandler;
 impl MatchingEngineHandler {
     pub fn new() -> Result<(mpsc::Sender<MatchingEngineMessage>, JoinHandle<()>)> {
         let (sender, receiver) = mpsc::channel(32);
-        let mut mea = MatchingEngineActor { receiver };
+        let mut mea = MatchingEngineActor {
+            receiver,
+            testing_counter: 0.into(),
+        };
 
         let matching_engine_handle = tokio::spawn(async move {
             match mea.run().await {
