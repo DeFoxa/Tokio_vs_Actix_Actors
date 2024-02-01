@@ -1,8 +1,6 @@
 use crate::{
     models::{BinancePartialBookModelInsertable, BinanceTradesNewModel},
-    schema::{
-        binancepartialbook, binancetrades,
-    },
+    schema::{binancepartialbook, binancetrades},
     types::*,
 };
 use actix::prelude::*;
@@ -19,7 +17,7 @@ use std::{
     fmt::{Debug, Display},
     time::{Duration, Instant},
 };
-use tracing::{instrument};
+use tracing::instrument;
 
 //
 // TODO: Fix the unnecessary clones tomorrow

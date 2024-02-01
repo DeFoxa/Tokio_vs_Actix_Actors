@@ -262,8 +262,6 @@ impl SequencerActor {
                                     },
 
                             }
-                            // not adding a log::info! message for standard processing for time being, only want
-                            // to see non standard scenarios in logs
                         }
                         SequencerState::PauseProcessing => match sequencer_msg {
                             SequencerMessage::TakerTrade(sequencer_msg) => {

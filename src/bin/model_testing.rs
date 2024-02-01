@@ -31,8 +31,21 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing_flame::FlameLayer;
 
 /// NOTE: Frameworks to include: Critereon for benchmarking, fuschia stress testing, goose load testing(maybe?)
+
 pub const MAINNET: &str = "wss://fstream.binance.com";
 
+// General framework for testing,
+// Read stream data (ob/trade) into memory prior to testing. Use criterion to iterate through x number of bench functions iterations.
+// Each function call processes the data in some subset of time, whereby we can have control over
+// load on message system, averaging msg_passed/ms, to test for backpressure issues. Increase load until
+// failure point (determine what qualifies as failure). Another method to stress test: add more
+// active stream connections (i.e. more incoming data) until system runs into quantifiable issues.
+// write end-point verification into matching engine.
+// Produce bad data to integrate into test data-set, and write custom functions to test
+// sequencer state management/changes. After all of these are passed, write live testing/data
+// verifications methods and grafana metric integration and test with live data. keep adding
+// new streams until the system is at capacity.
+//
 #[tokio::main]
 async fn main() -> Result<()> {
     let file_appender = tracing_appender::rolling::minutely(

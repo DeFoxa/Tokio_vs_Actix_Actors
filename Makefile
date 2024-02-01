@@ -2,7 +2,7 @@
 main:
 	cargo run --bin ob_stream_concurrency_testing
 
-diesel-setup:
+diesel:
 	cargo run --bin diesel_setup
 
 tokio: 
@@ -10,4 +10,5 @@ tokio:
 
 actix: 
 	cargo run --bin actix_framework
-
+test:
+	cargo run --bin model_testing
