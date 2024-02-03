@@ -16,3 +16,9 @@ test:
 
 tui:
 	cargo run --bin testing_tui 
+
+debug kompact:
+	cargo run --bin kompact_framework
+
+kompact:
+	cargo run --release --bin kompact_framework
