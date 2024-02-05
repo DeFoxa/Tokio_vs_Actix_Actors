@@ -8,6 +8,10 @@ edition = "2021"
 name = "lib"
 path = "src/lib.rs"
 
+[[bin]]
+name = "kompact_aeron"
+path = "src/bin/kompact_aeron/main.rs"
+
 [dependencies]
 tokio-tungstenite = { version = "0.20.0", features = ["native-tls"] }
 crossbeam = "0.8.4"
