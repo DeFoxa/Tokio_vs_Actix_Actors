@@ -18,7 +18,10 @@ tui:
 	cargo run --bin testing_tui 
 
 debug kompact:
-	cargo run --bin kompact_framework
+	cargo run --bin kompact_aeron 
 
 kompact:
-	cargo run --release --bin kompact_framework
+	cargo run --release --bin kompact_aeron
+
+watch kompact:
+	cargo watch -x 'run --bin kompact_aeron'
