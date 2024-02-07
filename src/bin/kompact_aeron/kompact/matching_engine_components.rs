@@ -1,3 +1,4 @@
+use crate::types::*;
 use kompact::prelude::*;
 use lib::types::*;
 
@@ -9,6 +10,7 @@ pub enum DeserializedData {
 #[derive(ComponentDefinition)]
 pub struct ServerClient {
     ctx: ComponentContext<Self>,
+    client: ClientTypes,
     trades_port: ProvidedPort<TradesPort>,
     ob_port: ProvidedPort<ObPort>,
 }
@@ -38,22 +40,23 @@ impl Provide<ObPort> for ServerClient {
     }
 }
 impl ServerClient {
-    fn new() -> ServerClient {
+    fn new(server_type: ClientTypes) -> ServerClient {
         ServerClient {
             ctx: ComponentContext::uninitialised(),
+            client: server_type,
             trades_port: ProvidedPort::uninitialised(),
             ob_port: ProvidedPort::uninitialised(),
         }
     }
-    fn route_deserialized_data(&self, data: DeserializedData) {
+    fn route_deserialized_data(&mut self, data: DeserializedData) {
         match data {
             DeserializedData::TakerTrades(trade_data) => {
-                // self.trades_port.trigger(trade_data);
-                todo!();
+                self.trades_port.trigger(trade_data);
+                // todo!();
             }
             DeserializedData::BookModel(ob_data) => {
-                // self.ob_port.trigger(ob_data);
-                todo!();
+                self.ob_port.trigger(ob_data);
+                // todo!();
             }
         }
     }
@@ -63,10 +66,11 @@ ignore_requests!(TradesPort, ObPort);
 
 impl ComponentLifecycle for ServerClient {
     fn on_start(&mut self) -> Handled {
-        // Fill these in and add fn on_pause and on_kill
+        //TODO: Fill these out
         Handled::Ok
     }
     fn on_stop(&mut self) -> Handled {
+        //TODO: Fill these out
         Handled::Ok
     }
     fn on_kill(&mut self) -> Handled {
