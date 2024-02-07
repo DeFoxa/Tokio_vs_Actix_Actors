@@ -48,10 +48,12 @@ impl ServerClient {
     fn route_deserialized_data(&self, data: DeserializedData) {
         match data {
             DeserializedData::TakerTrades(trade_data) => {
-                self.trades_port.trigger(trade_data);
+                // self.trades_port.trigger(trade_data);
+                todo!();
             }
             DeserializedData::BookModel(ob_data) => {
-                self.ob_port.trigger(ob_data);
+                // self.ob_port.trigger(ob_data);
+                todo!();
             }
         }
     }
@@ -95,7 +97,10 @@ impl Actor for Sequencer {
     type Message = DeserializedData;
 
     fn receive_local(&mut self, msg: Self::Message) -> Handled {
-        self.handle_incoming_data(msg);
+        match msg {
+            DeserializedData::BookModel(data) => println!("Received Trade {:?}", data),
+            DeserializedData::TakerTrades(data) => println!("Received Ob Update {:?}", data),
+        }
         Handled::Ok
     }
     fn receive_network(&mut self, msg: NetMessage) -> Handled {
@@ -104,6 +109,19 @@ impl Actor for Sequencer {
     }
 }
 ignore_lifecycle!(Sequencer);
+impl Require<TradesPort> for Sequencer {
+    fn handle(&mut self, event: TakerTrades) -> Handled {
+        todo!();
+        Handled::Ok
+    }
+}
+
+impl Require<ObPort> for Sequencer {
+    fn handle(&mut self, event: BookModel) -> Handled {
+        todo!();
+        Handled::Ok
+    }
+}
 // impl ComponentLifecycle for Sequencer {
 //
 // }
