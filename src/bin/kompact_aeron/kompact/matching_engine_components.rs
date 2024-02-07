@@ -60,10 +60,17 @@ impl ServerClient {
 }
 // ignore_lifecycle!(ServerClient);
 ignore_requests!(TradesPort, ObPort);
+
 impl ComponentLifecycle for ServerClient {
     fn on_start(&mut self) -> Handled {
         // Fill these in and add fn on_pause and on_kill
         Handled::Ok
+    }
+    fn on_stop(&mut self) -> Handled {
+        Handled::Ok
+    }
+    fn on_kill(&mut self) -> Handled {
+        self.on_stop()
     }
 }
 impl Actor for ServerClient {
