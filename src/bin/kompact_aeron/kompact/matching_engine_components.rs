@@ -6,12 +6,13 @@ pub enum DeserializedData {
     TakerTrades(TakerTrades),
     BookModel(BookModel),
 }
+#[derive(ComponentDefinition)]
 pub struct ServerClient {
     ctx: ComponentContext<Self>,
     trades_port: ProvidedPort<TradesPort>,
     ob_port: ProvidedPort<ObPort>,
 }
-
+//TODO: change indication types to DeserializedData wrapped around deserialized stream types
 struct ObPort;
 impl Port for ObPort {
     type Indication = BookModel;
@@ -33,10 +34,17 @@ impl Provide<TradesPort> for ServerClient {
 
 impl Provide<ObPort> for ServerClient {
     fn handle(&mut self, _: Never) -> Handled {
-        Handled::OK
+        Handled::Ok
     }
 }
 impl ServerClient {
+    fn new() -> ServerClient {
+        ServerClient {
+            ctx: ComponentContext::uninitialised(),
+            trades_port: ProvidedPort::uninitialised(),
+            ob_port: ProvidedPort::uninitialised(),
+        }
+    }
     fn route_deserialized_data(&self, data: DeserializedData) {
         match data {
             DeserializedData::TakerTrades(trade_data) => {
@@ -46,6 +54,25 @@ impl ServerClient {
                 self.ob_port.trigger(ob_data);
             }
         }
+    }
+}
+// ignore_lifecycle!(ServerClient);
+ignore_requests!(TradesPort, ObPort);
+impl ComponentLifecycle for ServerClient {
+    fn on_start(&mut self) -> Handled {
+        // Fill these in and add fn on_pause and on_kill
+        Handled::Ok
+    }
+}
+impl Actor for ServerClient {
+    type Message = ();
+
+    fn receive_local(&mut self, _msg: Self::Message) -> Handled {
+        Handled::Ok
+    }
+
+    fn receive_network(&mut self, _msg: NetMessage) -> Handled {
+        unimplemented!("ignoring networking");
     }
 }
 
