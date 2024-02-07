@@ -1,3 +1,5 @@
+mod kompact;
+
 fn main() {
-    todo!();
+    println!("tmp");
 }
