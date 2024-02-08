@@ -1,5 +1,6 @@
 use std::sync::mpsc;
 
+use crate::kompact::client_components::*;
 use crate::types::*;
 use anyhow::Result;
 use tokio::net::TcpStream;
@@ -25,146 +26,9 @@ pub struct ServerClient {
     ctx: ComponentContext<Self>,
     client: ClientTypes,
     // socket: Option<WebSocketState<MaybeTlsStream<TcpStream>>>,
-    trades_port: ProvidedPort<TradesPort>,
-    ob_port: ProvidedPort<ObPort>,
+    // trades_port: ProvidedPort<TradesPort>,
+    // ob_port: ProvidedPort<ObPort>,
 }
-//TODO: change indication types to DeserializedData wrapped around deserialized stream types
-
-#[derive(Debug, Clone)]
-struct ObPort;
-
-impl Port for ObPort {
-    type Indication = BookModel;
-    type Request = Never;
-}
-
-#[derive(Debug, Clone)]
-struct TradesPort;
-
-impl Port for TradesPort {
-    type Indication = TakerTrades;
-    type Request = Never;
-}
-
-impl Provide<TradesPort> for ServerClient {
-    fn handle(&mut self, _: Never) -> Handled {
-        Handled::Ok
-    }
-}
-
-impl Provide<ObPort> for ServerClient {
-    fn handle(&mut self, _: Never) -> Handled {
-        Handled::Ok
-    }
-}
-
-impl ServerClient {
-    fn new(server_type: ClientTypes) -> ServerClient {
-        ServerClient {
-            ctx: ComponentContext::uninitialised(),
-            client: server_type,
-            // socket: None,
-            trades_port: ProvidedPort::uninitialised(),
-            ob_port: ProvidedPort::uninitialised(),
-        }
-    }
-    //NOTE: connect_combined_async() takes streams as vec<&str>, ideally I'd like to pass
-    //Vec<StreaMNameGenerator> to ws_combined_combined_stream, TODO: write a method on
-    //StreamNameGenerator to implement this.
-    async fn ws_combined_stream_connect(&mut self, url: &str, streams: Vec<&str>) -> Result<()> {
-        let (mut ws_state, Response) = Client::connect_combined_async(url, streams).await?;
-        let (write, read) = ws_state.socket.split();
-
-        let route_data = |data: DeserializedData| {
-            match data {
-                DeserializedData::TakerTrades(trade_data) => {
-                    self.trades_port.trigger(trade_data);
-                    // todo!();
-                }
-                DeserializedData::BookModel(ob_data) => {
-                    self.ob_port.trigger(ob_data);
-                    // todo!();
-                }
-            }
-        };
-        //
-        // read.for_each(|message| async {
-        //     match message {
-        //         Ok(Message::Text(text)) => {
-        //             let value: Value = serde_json::from_str(&text).expect(
-        //                 "value error from stream message serde_json::from_str deserializer",
-        //             );
-        //             let event = value.get("e").and_then(Value::as_str);
-        //             match event {
-        //                 Some("aggTrade") => {
-        //                     let trades = serde_json::from_value::<BinanceTrades>(value.clone())
-        //                         .expect("error deserializing to binancetrades");
-        //                     let data = DeserializedData::TakerTrades(
-        //                         trades
-        //                             .to_trades_type()
-        //                             .expect("error converting to TakerTrades"),
-        //                     );
-        //                     route_data(data);
-        //                 }
-        //                 Some("depthUpdate") => {
-        //                     let book = serde_json::from_value::<BinancePartialBook>(value.clone())
-        //                         .expect("error deserializing to PartialBook");
-        //                     book.to_book_model();
-        //                     // println!("{:?}", &book);
-        //                 }
-        //                 _ => {
-        //                     eprintln!(
-        //                         "Error matching deserialized fields, no aggTrade or depthUpdate"
-        //                     );
-        //                 }
-        //             }
-        //         }
-        //         _ => (),
-        //     }
-        // });
-        // .await;
-        Ok(())
-    }
-
-    fn ws_single_connect(&self, stream: StreamNameGenerator) {}
-
-    // TODO: create a functio for listening on message stream that is established by on_start
-    fn listen_for_messages(&mut self) {
-        //TODO
-        //Message handling code
-        // match &self.client {
-        // ClientTypes::Websocket(ws) => {
-        if let ClientTypes::Websocket(ws) = &self.client {
-            let ws_clone = ws.clone();
-            self.spawn_off(async move { ServerClient::process_websocket_messages(ws_clone).await });
-        }
-
-        // ClientTypes::Rpc => unimplemented!(),
-        // ClientTypes::Rest => unimplemented!(),
-    }
-    async fn process_websocket_messages(ws: &WebSocketState<MaybeTlsStream<TcpStream>>) {
-        if let (mut write, mut read) = ws.socket.split() {
-            while let Some(message) = read.next().await {
-                println!("{:?}", message);
-            }
-        }
-    }
-
-    fn route_deserialized_data(&mut self, data: DeserializedData) {
-        match data {
-            DeserializedData::TakerTrades(trade_data) => {
-                self.trades_port.trigger(trade_data);
-                // todo!();
-            }
-            DeserializedData::BookModel(ob_data) => {
-                self.ob_port.trigger(ob_data);
-                // todo!();
-            }
-        }
-    }
-}
-// ignore_lifecycle!(ServerClient);
-ignore_requests!(TradesPort, ObPort);
 
 //TODO: considering rewriting on start, to call a method on server_client that initializes the
 //client connection, instead of directly from on_start. on_start initializes the connection, but
@@ -172,21 +36,22 @@ ignore_requests!(TradesPort, ObPort);
 impl ComponentLifecycle for ServerClient {
     fn on_start(&mut self) -> Handled {
         info!(self.ctx.log(), "server client start event");
+        //TODO: starts our server_client component based on inst input -> sends messages to Deserializer
 
-        Handled::block_on(self, move |mut async_self| async move {
-            let (mut client, Response) = Client::connect_combined_async(
-                BINANCE,
-                vec![
-                    &StreamNameGenerator::combined_stream_partial_book("ethusdt", "10").await,
-                    &StreamNameGenerator::combined_stream_trades_by_symbol("ethusdt").await,
-                ],
-            )
-            .await
-            .unwrap();
-            async_self.client = ClientTypes::Websocket(client);
-        });
-
-        self.listen_for_messages();
+        match &self.client {
+            ClientTypes::Websocket(ws) => {
+                // generate the ws component
+                todo!();
+            }
+            ClientTypes::Rest => {
+                // generate the rest component
+                todo!();
+            }
+            ClientTypes::Rpc => {
+                //generate the rest component
+                todo!();
+            }
+        }
         Handled::Ok
     }
     fn on_stop(&mut self) -> Handled {
@@ -209,6 +74,49 @@ impl Actor for ServerClient {
         unimplemented!("ignoring networking");
     }
 }
+
+#[derive(Debug, Clone)]
+struct ObPort;
+
+impl Port for ObPort {
+    type Indication = BookModel;
+    type Request = Never;
+}
+
+#[derive(Debug, Clone)]
+struct TradesPort;
+
+impl Port for TradesPort {
+    type Indication = TakerTrades;
+    type Request = Never;
+}
+
+//TODO: change indication types to DeserializedData wrapped around deserialized stream types
+// impl Provide<TradesPort> for ServerClient {
+//     fn handle(&mut self, _: Never) -> Handled {
+//         Handled::Ok
+//     }
+// }
+//
+// impl Provide<ObPort> for ServerClient {
+//     fn handle(&mut self, _: Never) -> Handled {
+//         Handled::Ok
+//     }
+// }
+//
+// impl ServerClient {
+//     fn new(server_type: ClientTypes) -> ServerClient {
+//         ServerClient {
+//             ctx: ComponentContext::uninitialised(),
+//             client: server_type,
+//             // socket: None,
+//             // trades_port: ProvidedPort::uninitialised(),
+//             // ob_port: ProvidedPort::uninitialised(),
+//         }
+//     }
+// }
+// ignore_lifecycle!(ServerClient);
+// ignore_requests!(TradesPort, ObPort);
 
 #[derive(ComponentDefinition)]
 pub struct Sequencer {
@@ -254,6 +162,3 @@ impl Require<ObPort> for Sequencer {
         Handled::Ok
     }
 }
-// impl ComponentLifecycle for Sequencer {
-//
-// }

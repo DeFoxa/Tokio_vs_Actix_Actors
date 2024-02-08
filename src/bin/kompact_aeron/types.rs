@@ -48,3 +48,8 @@ impl ClientTypes {
 //     socket: WebSocketStream<T>,
 //     stream_name: Option<StreamNameGenerator>,
 //    }
+
+pub enum StreamMessage {
+    TradeMessage,
+    BookMessage,
+}

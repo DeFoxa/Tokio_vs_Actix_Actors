@@ -72,6 +72,28 @@ impl Client {
         }
         Ok((WebSocketState::new(socket), response))
     }
+
+    pub async fn connect_combined_owned(
+        url: &str,
+        streams: Vec<String>,
+    ) -> Result<(WebSocketState<MaybeTlsStream<TcpStream>>, Response), Error> {
+        let combined_path = streams
+            .iter()
+            .map(|name| format!("{}", name))
+            .collect::<Vec<_>>()
+            .join("/");
+        let full_url = format!("{}/ws/{}", url, combined_path);
+
+        let (socket, response) = connect_async(Url::parse(&full_url).unwrap()).await?;
+        log::info!("connected to {}", url);
+        log::debug!("response http code: {}", response.status());
+        log::debug!("response headers");
+        for (ref header, _value) in response.headers() {
+            log::debug!("* {}", header);
+        }
+        Ok((WebSocketState::new(socket), response))
+    }
+
     ///
     /// Connect with listen_key for account, trade, balance, etc updates
     ///
