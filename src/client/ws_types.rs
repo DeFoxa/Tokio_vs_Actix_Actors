@@ -1,6 +1,5 @@
-use anyhow::{Result};
+use anyhow::Result;
 use futures_util::SinkExt;
-
 
 use std::fmt;
 
@@ -91,7 +90,6 @@ impl Client {
         Ok((WebSocketState::new(socket), response))
     }
 }
-
 pub struct WebSocketState<T> {
     pub socket: WebSocketStream<T>,
     pub id: u64,

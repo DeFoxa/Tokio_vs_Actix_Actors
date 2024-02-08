@@ -1,15 +1,17 @@
+use std::sync::mpsc;
+
 use crate::types::*;
 use anyhow::Result;
-// use tokio::net::TcpStream;
+use tokio::net::TcpStream;
 // use futures::stream::StreamExt;
-use futures_util::{Stream, StreamExt};
+use futures_util::{SinkExt, Stream, StreamExt};
 use kompact::prelude::*;
 use lib::{
     client::{ws::*, ws_types::*},
     types::*,
 };
 use serde_json::Value;
-use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream};
+use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
 pub const BINANCE: &str = "wss://fstream.binance.com";
 
@@ -19,7 +21,7 @@ pub enum DeserializedData {
     BookModel(BookModel),
 }
 #[derive(ComponentDefinition)]
-pub struct ServerClient /* <T: 'static + Send> */ {
+pub struct ServerClient {
     ctx: ComponentContext<Self>,
     client: ClientTypes,
     // socket: Option<WebSocketState<MaybeTlsStream<TcpStream>>>,
@@ -27,12 +29,16 @@ pub struct ServerClient /* <T: 'static + Send> */ {
     ob_port: ProvidedPort<ObPort>,
 }
 //TODO: change indication types to DeserializedData wrapped around deserialized stream types
+
+#[derive(Debug, Clone)]
 struct ObPort;
+
 impl Port for ObPort {
     type Indication = BookModel;
     type Request = Never;
 }
 
+#[derive(Debug, Clone)]
 struct TradesPort;
 
 impl Port for TradesPort {
@@ -126,6 +132,22 @@ impl ServerClient {
     fn listen_for_messages(&mut self) {
         //TODO
         //Message handling code
+        // match &self.client {
+        // ClientTypes::Websocket(ws) => {
+        if let ClientTypes::Websocket(ws) = &self.client {
+            let ws_clone = ws.clone();
+            self.spawn_off(async move { ServerClient::process_websocket_messages(ws_clone).await });
+        }
+
+        // ClientTypes::Rpc => unimplemented!(),
+        // ClientTypes::Rest => unimplemented!(),
+    }
+    async fn process_websocket_messages(ws: &WebSocketState<MaybeTlsStream<TcpStream>>) {
+        if let (mut write, mut read) = ws.socket.split() {
+            while let Some(message) = read.next().await {
+                println!("{:?}", message);
+            }
+        }
     }
 
     fn route_deserialized_data(&mut self, data: DeserializedData) {
@@ -149,6 +171,8 @@ ignore_requests!(TradesPort, ObPort);
 //message handling is
 impl ComponentLifecycle for ServerClient {
     fn on_start(&mut self) -> Handled {
+        info!(self.ctx.log(), "server client start event");
+
         Handled::block_on(self, move |mut async_self| async move {
             let (mut client, Response) = Client::connect_combined_async(
                 BINANCE,
@@ -161,9 +185,8 @@ impl ComponentLifecycle for ServerClient {
             .unwrap();
             async_self.client = ClientTypes::Websocket(client);
         });
+
         self.listen_for_messages();
-        //TODO: Fill these out
-        info!(self.ctx.log(), "server client start event");
         Handled::Ok
     }
     fn on_stop(&mut self) -> Handled {
