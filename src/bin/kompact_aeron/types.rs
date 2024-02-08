@@ -14,8 +14,8 @@ use tokio::{
 /// TODO: will come back to effecient server_client spawning later, current focus is hybrid model
 /// TODO: write enum/methods for kompact manager input -> exchange specific (multi-exchange) stream
 /// connection generator. i.e. one api interface to connect to ws variations and return the Stream/Response
-pub enum ClientTypes<T> {
-    Websocket(WsComponents<T>),
+pub enum ClientTypes {
+    Websocket(WebSocketState<MaybeTlsStream<TcpStream>>),
     Rest,
     Rpc,
 }
@@ -26,7 +26,7 @@ type WsConnectFn =
     )
         -> Result<(WebSocketState<MaybeTlsStream<TcpStream>>, Response), tungstenite::Error>;
 
-impl<T> ClientTypes<T> {
+impl ClientTypes {
     fn get_url(&self, url: &str, endpoint: Option<&str>) {
         match self {
             ClientTypes::Websocket(_) => todo!(),
@@ -42,10 +42,7 @@ impl<T> ClientTypes<T> {
         connect(url)
     }
 }
-pub struct WsComponents<T> {
-    socket: WebSocketStream<T>,
-    url: String,
-    endpoint: Option<String>,
-    symbol: Option<String>,
-    timeframe: Option<String>,
-}
+// pub struct WsComponents<T> {
+//     socket: WebSocketStream<T>,
+//     stream_name: Option<StreamNameGenerator>,
+//    }

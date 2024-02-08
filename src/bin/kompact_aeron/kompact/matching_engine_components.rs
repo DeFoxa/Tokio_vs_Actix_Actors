@@ -1,5 +1,6 @@
 use crate::types::*;
 use anyhow::Result;
+// use tokio::net::TcpStream;
 // use futures::stream::StreamExt;
 use futures_util::{Stream, StreamExt};
 use kompact::prelude::*;
@@ -8,7 +9,7 @@ use lib::{
     types::*,
 };
 use serde_json::Value;
-use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream};
 
 pub const BINANCE: &str = "wss://fstream.binance.com";
 
@@ -18,9 +19,10 @@ pub enum DeserializedData {
     BookModel(BookModel),
 }
 #[derive(ComponentDefinition)]
-pub struct ServerClient<T: 'static + Send> {
+pub struct ServerClient /* <T: 'static + Send> */ {
     ctx: ComponentContext<Self>,
-    client: ClientTypes<T>,
+    client: ClientTypes,
+    // socket: Option<WebSocketState<MaybeTlsStream<TcpStream>>>,
     trades_port: ProvidedPort<TradesPort>,
     ob_port: ProvidedPort<ObPort>,
 }
@@ -38,23 +40,24 @@ impl Port for TradesPort {
     type Request = Never;
 }
 
-impl<T: 'static + Send> Provide<TradesPort> for ServerClient<T> {
+impl Provide<TradesPort> for ServerClient {
     fn handle(&mut self, _: Never) -> Handled {
         Handled::Ok
     }
 }
 
-impl<T: 'static + Send> Provide<ObPort> for ServerClient<T> {
+impl Provide<ObPort> for ServerClient {
     fn handle(&mut self, _: Never) -> Handled {
         Handled::Ok
     }
 }
 
-impl<T: 'static + Send> ServerClient<T> {
-    fn new(server_type: ClientTypes<T>) -> ServerClient<T> {
+impl ServerClient {
+    fn new(server_type: ClientTypes) -> ServerClient {
         ServerClient {
             ctx: ComponentContext::uninitialised(),
             client: server_type,
+            // socket: None,
             trades_port: ProvidedPort::uninitialised(),
             ob_port: ProvidedPort::uninitialised(),
         }
@@ -119,6 +122,12 @@ impl<T: 'static + Send> ServerClient<T> {
 
     fn ws_single_connect(&self, stream: StreamNameGenerator) {}
 
+    // TODO: create a functio for listening on message stream that is established by on_start
+    fn listen_for_messages(&mut self) {
+        //TODO
+        //Message handling code
+    }
+
     fn route_deserialized_data(&mut self, data: DeserializedData) {
         match data {
             DeserializedData::TakerTrades(trade_data) => {
@@ -135,11 +144,24 @@ impl<T: 'static + Send> ServerClient<T> {
 // ignore_lifecycle!(ServerClient);
 ignore_requests!(TradesPort, ObPort);
 
-impl<T: 'static + Send> ComponentLifecycle for ServerClient<T> {
+//TODO: considering rewriting on start, to call a method on server_client that initializes the
+//client connection, instead of directly from on_start. on_start initializes the connection, but
+//message handling is
+impl ComponentLifecycle for ServerClient {
     fn on_start(&mut self) -> Handled {
         Handled::block_on(self, move |mut async_self| async move {
-            todo!();
+            let (mut client, Response) = Client::connect_combined_async(
+                BINANCE,
+                vec![
+                    &StreamNameGenerator::combined_stream_partial_book("ethusdt", "10").await,
+                    &StreamNameGenerator::combined_stream_trades_by_symbol("ethusdt").await,
+                ],
+            )
+            .await
+            .unwrap();
+            async_self.client = ClientTypes::Websocket(client);
         });
+        self.listen_for_messages();
         //TODO: Fill these out
         info!(self.ctx.log(), "server client start event");
         Handled::Ok
@@ -153,7 +175,7 @@ impl<T: 'static + Send> ComponentLifecycle for ServerClient<T> {
         self.on_stop()
     }
 }
-impl<T: 'static + Send> Actor for ServerClient<T> {
+impl Actor for ServerClient {
     type Message = ();
 
     fn receive_local(&mut self, _msg: Self::Message) -> Handled {
