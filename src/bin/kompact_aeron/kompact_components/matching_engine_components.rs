@@ -32,7 +32,7 @@ pub struct ServerClient {
     // ob_port: ProvidedPort<ObPort>,
 }
 impl ServerClient {
-    pub fn new(&mut self, client_type: ClientTypes) -> Self {
+    pub fn new(client_type: ClientTypes) -> Self {
         Self {
             ctx: ComponentContext::uninitialised(),
             client: client_type,
