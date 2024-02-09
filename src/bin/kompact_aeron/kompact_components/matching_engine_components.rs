@@ -26,7 +26,8 @@ pub enum DeserializedData {
 pub struct ServerClient {
     ctx: ComponentContext<Self>,
     client: ClientTypes,
-    client_components: Option<Vec<String>>,
+    // client_components: Option<Vec<String>>,
+    normalizer_ref_tmp: Option<ActorRefStrong<StreamMessage>>,
     // socket: Option<WebSocketState<MaybeTlsStream<TcpStream>>>,
     // trades_port: ProvidedPort<TradesPort>,
     // ob_port: ProvidedPort<ObPort>,
@@ -36,7 +37,8 @@ impl ServerClient {
         Self {
             ctx: ComponentContext::uninitialised(),
             client: client_type,
-            client_components: None,
+            // client_components: None,
+            normalizer_ref_tmp: None,
         }
     }
 }
@@ -45,12 +47,29 @@ impl ServerClient {
 //message handling is
 impl ComponentLifecycle for ServerClient {
     fn on_start(&mut self) -> Handled {
+        // info!(
+        //     self.ctx.log(),
+        //     "ClientComponents: {:?}", self.client_components
+        // );
         info!(self.ctx.log(), "server client start event");
         //TODO: starts our server_client component based on inst input -> sends messages to Deserializer
 
         match &self.client {
             ClientTypes::Websocket => {
+                let normalizer_actor = self.ctx.system().create(|| DataNormalizer::new());
+                let normalizer_ref = normalizer_actor
+                    .actor_ref()
+                    .hold()
+                    .expect("Failed to hold actor_ref");
+                self.normalizer_ref_tmp = Some(normalizer_ref);
+
                 Handled::block_on(self, move |mut async_self| async move {
+                    println!("test");
+                    info!(
+                        async_self.ctx.log(),
+                        "!!!!!!!!!!!!!!!!!!!!!**************************!!!!!!!!!!!!!!!!",
+                    );
+
                     let stream_names = vec![
                         &StreamNameGenerator::combined_stream_partial_book("ethusdt", "10").await,
                         &StreamNameGenerator::combined_stream_trades_by_symbol("ethusdt").await,
@@ -58,21 +77,23 @@ impl ComponentLifecycle for ServerClient {
                     .into_iter()
                     .map(|s| s.to_string())
                     .collect::<Vec<_>>();
-                    async_self.client_components = Some(stream_names);
-                });
 
-                let normalizer_actor = self.ctx.system().create(|| DataNormalizer::new());
-                let normalizer_ref = normalizer_actor
-                    .actor_ref()
-                    .hold()
-                    .expect("Failed to hold actor_ref");
+                    // async_self.client_components = Some(stream_names);
+                    let normalizer_ref = async_self
+                        .normalizer_ref_tmp
+                        .take()
+                        .expect("normalizer_ref not set");
 
-                let ws_component = self.ctx.system().create(|| {
-                    WebSocketComponent::<StreamMessage>::new(
-                        self.client_components.clone().expect("Error: None returned on self.client_components in WSComponent instantiator"),
-                        None,
-                        normalizer_ref,
-                    )
+                    info!(async_self.ctx.log(), "ws_component creation");
+                    let ws_component = async_self.ctx.system().create(|| {
+                        WebSocketComponent::<StreamMessage>::new(
+                            // self.client_components.clone().expect("Error: None returned on self.client_components in WSComponent instantiator"),
+                            stream_names.clone(),
+                            None,
+                            normalizer_ref,
+                        )
+                    });
+                    async_self.ctx.system().start(&ws_component);
                 });
             }
             ClientTypes::Rest => {
