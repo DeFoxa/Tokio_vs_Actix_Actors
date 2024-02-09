@@ -50,6 +50,6 @@ impl ClientTypes {
 //    }
 #[derive(Debug)]
 pub enum StreamMessage {
-    TradeMessage,
-    BookMessage,
+    TradeMessage(String),
+    BookMessage(String),
 }

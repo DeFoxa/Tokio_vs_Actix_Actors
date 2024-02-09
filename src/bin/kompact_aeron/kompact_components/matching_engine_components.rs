@@ -61,23 +61,28 @@ impl ComponentLifecycle for ServerClient {
                     async_self.client_components = Some(stream_names);
                 });
 
-                let normalizer_actor: ActorRefStrong<_> = todo!();
+                let normalizer_actor = self.ctx.system().create(|| DataNormalizer::new());
+                let normalizer_ref = normalizer_actor
+                    .actor_ref()
+                    .hold()
+                    .expect("Failed to hold actor_ref");
 
                 let ws_component = self.ctx.system().create(|| {
                     WebSocketComponent::<StreamMessage>::new(
                         self.client_components.clone().expect("Error: None returned on self.client_components in WSComponent instantiator"),
                         None,
-                        normalizer_actor,
+                        normalizer_ref,
                     )
                 });
             }
             ClientTypes::Rest => {
                 // generate the rest component
-                todo!();
+                println!("Testing: server_client on_start from Rest match statement")
             }
+
             ClientTypes::Rpc => {
                 //generate the rest component
-                todo!();
+                println!("Testing: server_client on_start from RPC match statement")
             }
         }
         Handled::Ok

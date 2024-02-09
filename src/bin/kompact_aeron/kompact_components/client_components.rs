@@ -66,3 +66,38 @@ impl<M: Send + Debug> Actor for WebSocketComponent<M> {
         unimplemented!("ignoring network for now");
     }
 }
+
+#[derive(ComponentDefinition)]
+pub struct DataNormalizer {
+    ctx: ComponentContext<Self>,
+}
+
+impl DataNormalizer {
+    pub fn new() -> Self {
+        Self {
+            ctx: ComponentContext::uninitialised(),
+        }
+    }
+}
+
+impl ComponentLifecycle for DataNormalizer {
+    fn on_start(&mut self) -> Handled {
+        info!(self.ctx.log(), "data normalizer start-up event");
+        Handled::Ok
+    }
+}
+
+impl Actor for DataNormalizer {
+    type Message = StreamMessage;
+
+    fn receive_local(&mut self, msg: Self::Message) -> Handled {
+        match msg {
+            StreamMessage::BookMessage(data) => println!("received book_message: {:?}", data),
+            StreamMessage::TradeMessage(data) => println!("received trade message: {:?}", data),
+        }
+        Handled::Ok
+    }
+    fn receive_network(&mut self, _msg: NetMessage) -> Handled {
+        unimplemented!("Data Normalizer does not handle network messages");
+    }
+}
