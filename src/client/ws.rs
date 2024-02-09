@@ -180,6 +180,7 @@ impl StreamNameGenerator {
     pub async fn combined_stream_trades_by_symbol(symbol: &str) -> String {
         format!("{}@aggTrade", &symbol)
     }
+
     /// Ticker KLINE for some timeframe
     pub async fn kline(symbol: &str, timeframe: &str) -> String {
         format!("{}/ws/{}@kline_{}", &MAINNET, &symbol, &timeframe)

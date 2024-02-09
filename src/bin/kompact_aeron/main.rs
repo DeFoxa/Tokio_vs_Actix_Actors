@@ -5,7 +5,8 @@ use kompact::prelude::*;
 pub mod kompact_components;
 pub mod types;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     // let cfg = KompactConfig::Default();
     // cfg.system_components(DeadLetterBox::new, NetworkConfig::default().build());
     // let system = cfg.build().expect("system");

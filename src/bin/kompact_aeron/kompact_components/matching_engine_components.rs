@@ -56,14 +56,9 @@ impl ComponentLifecycle for ServerClient {
 
         match &self.client {
             ClientTypes::Websocket => {
-                let normalizer_actor = self.ctx.system().create(|| DataNormalizer::new());
-                let normalizer_ref = normalizer_actor
-                    .actor_ref()
-                    .hold()
-                    .expect("Failed to hold actor_ref");
-                self.normalizer_ref_tmp = Some(normalizer_ref);
+                let system_clone = self.ctx.system();
 
-                Handled::block_on(self, move |mut async_self| async move {
+                self.spawn_local(move |mut async_self| async move {
                     println!("test");
                     info!(
                         async_self.ctx.log(),
@@ -79,9 +74,12 @@ impl ComponentLifecycle for ServerClient {
                     .collect::<Vec<_>>();
 
                     // async_self.client_components = Some(stream_names);
-                    let normalizer_ref = async_self
-                        .normalizer_ref_tmp
-                        .take()
+                    let normalizer_actor = system_clone.create(|| DataNormalizer::new());
+                    system_clone.start(&normalizer_actor);
+
+                    let normalizer_ref = normalizer_actor
+                        .actor_ref()
+                        .hold()
                         .expect("normalizer_ref not set");
 
                     info!(async_self.ctx.log(), "ws_component creation");
@@ -93,7 +91,9 @@ impl ComponentLifecycle for ServerClient {
                             normalizer_ref,
                         )
                     });
-                    async_self.ctx.system().start(&ws_component);
+                    // async_self.ctx.system().start(&ws_component);
+                    system_clone.start(&ws_component);
+                    Handled::Ok
                 });
             }
             ClientTypes::Rest => {
