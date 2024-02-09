@@ -17,7 +17,7 @@ use tokio::{
 /// connection generator. i.e. one api interface to connect to ws variations and return the Stream/Response
 // #[derive(Debug, Clone)]
 pub enum ClientTypes {
-    Websocket(WebSocketState<MaybeTlsStream<TcpStream>>),
+    Websocket, /* (WebSocketState<MaybeTlsStream<TcpStream>>) */
     Rest,
     Rpc,
 }
@@ -31,7 +31,7 @@ type WsConnectFn =
 impl ClientTypes {
     fn get_url(&self, url: &str, endpoint: Option<&str>) {
         match self {
-            ClientTypes::Websocket(_) => todo!(),
+            ClientTypes::Websocket => todo!(),
             ClientTypes::Rest => todo!(),
             ClientTypes::Rpc => todo!(),
         }
@@ -48,7 +48,7 @@ impl ClientTypes {
 //     socket: WebSocketStream<T>,
 //     stream_name: Option<StreamNameGenerator>,
 //    }
-
+#[derive(Debug)]
 pub enum StreamMessage {
     TradeMessage,
     BookMessage,

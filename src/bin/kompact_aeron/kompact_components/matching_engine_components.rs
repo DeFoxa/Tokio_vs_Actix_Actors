@@ -1,6 +1,7 @@
 use std::sync::mpsc;
+use tokio::join;
 
-use crate::kompact::client_components::*;
+use crate::kompact_components::client_components::*;
 use crate::types::*;
 use anyhow::Result;
 use tokio::net::TcpStream;
@@ -25,11 +26,20 @@ pub enum DeserializedData {
 pub struct ServerClient {
     ctx: ComponentContext<Self>,
     client: ClientTypes,
+    client_components: Option<Vec<String>>,
     // socket: Option<WebSocketState<MaybeTlsStream<TcpStream>>>,
     // trades_port: ProvidedPort<TradesPort>,
     // ob_port: ProvidedPort<ObPort>,
 }
-
+impl ServerClient {
+    pub fn new(&mut self, client_type: ClientTypes) -> Self {
+        Self {
+            ctx: ComponentContext::uninitialised(),
+            client: client_type,
+            client_components: None,
+        }
+    }
+}
 //TODO: considering rewriting on start, to call a method on server_client that initializes the
 //client connection, instead of directly from on_start. on_start initializes the connection, but
 //message handling is
@@ -39,9 +49,27 @@ impl ComponentLifecycle for ServerClient {
         //TODO: starts our server_client component based on inst input -> sends messages to Deserializer
 
         match &self.client {
-            ClientTypes::Websocket(ws) => {
-                // generate the ws component
-                todo!();
+            ClientTypes::Websocket => {
+                Handled::block_on(self, move |mut async_self| async move {
+                    let stream_names = vec![
+                        &StreamNameGenerator::combined_stream_partial_book("ethusdt", "10").await,
+                        &StreamNameGenerator::combined_stream_trades_by_symbol("ethusdt").await,
+                    ]
+                    .into_iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>();
+                    async_self.client_components = Some(stream_names);
+                });
+
+                let normalizer_actor: ActorRefStrong<_> = todo!();
+
+                let ws_component = self.ctx.system().create(|| {
+                    WebSocketComponent::<StreamMessage>::new(
+                        self.client_components.clone().expect("Error: None returned on self.client_components in WSComponent instantiator"),
+                        None,
+                        normalizer_actor,
+                    )
+                });
             }
             ClientTypes::Rest => {
                 // generate the rest component
