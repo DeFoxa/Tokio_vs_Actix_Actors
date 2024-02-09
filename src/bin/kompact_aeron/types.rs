@@ -1,6 +1,10 @@
 use anyhow::Result;
 use futures_util::{Stream, StreamExt};
 use lib::client::ws_types::*;
+use lib::{
+    client::{ws::*, ws_types::*},
+    types::*,
+};
 use tokio_tungstenite::{
     connect_async,
     tungstenite::{handshake::client::Response, protocol::Message, Error},
@@ -50,6 +54,6 @@ impl ClientTypes {
 //    }
 #[derive(Debug)]
 pub enum StreamMessage {
-    TradeMessage(String),
+    TradeMessage(BinanceTrades),
     BookMessage(String),
 }

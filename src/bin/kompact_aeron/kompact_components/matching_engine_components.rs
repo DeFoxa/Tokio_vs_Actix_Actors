@@ -83,16 +83,16 @@ impl ComponentLifecycle for ServerClient {
                         .expect("normalizer_ref not set");
 
                     info!(async_self.ctx.log(), "ws_component creation");
-                    let ws_component = async_self.ctx.system().create(|| {
-                        WebSocketComponent::<StreamMessage>::new(
-                            // self.client_components.clone().expect("Error: None returned on self.client_components in WSComponent instantiator"),
-                            stream_names.clone(),
-                            None,
-                            normalizer_ref,
-                        )
-                    });
+                    // let ws_component = async_self.ctx.system().create(|| {
+                    //     WebSocketComponent::<StreamMessage>::new(
+                    //         // self.client_components.clone().expect("Error: None returned on self.client_components in WSComponent instantiator"),
+                    //         stream_names.clone(),
+                    //         None,
+                    //         normalizer_ref,
+                    //     )
+                    // });
                     // async_self.ctx.system().start(&ws_component);
-                    system_clone.start(&ws_component);
+                    // system_clone.start(&ws_component);
                     Handled::Ok
                 });
             }
