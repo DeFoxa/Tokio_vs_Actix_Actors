@@ -21,3 +21,21 @@ Architecture Notes (MatchingEngine framework):
         - Deserialized data Port: Provide on server client, Require on sequencer: Indication = deserialized type, Request = Never
         - Sequenced Data: Direct messages sent from sequencer to ME. Can also spawn a port on sequencer for DB write actor or any lower performance actors requiring access to
         sequenced data
+
+Redesign Notes:
+
+Server-Client(external data sources): moving these processes to another program to run within tokio async/channel concurrency framework. This will allow more robut testing of aeron, simplifies the kompact concurrency setup and will allow using receive_network event handling within kompact (which I'm interested in testing/building)
+
+General Framework:
+    Serverclient program connects to external communication servers(WS, Rest, RPC)
+    Deserializes to server specific type 
+        -> passes events through aeron producer 
+            -> kompact receive_network consumes incoming data, received by data normalizer within kompact, converts to normalized type
+                -> normalized types sent to sequencer
+                    -> sent by sequencer to data processing/modeling component
+                        -> internal state change messages to active components
+                            -> outgoing requests sent (to client sytsem or to external servers directly) 
+                            
+
+
+

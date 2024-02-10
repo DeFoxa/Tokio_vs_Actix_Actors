@@ -21,6 +21,8 @@ async fn main() {
     // let cfg = KompactConfig::Default();
     // cfg.system_components(DeadLetterBox::new, NetworkConfig::default().build());
     // let system = cfg.build().expect("system");
+    let (sender, receiver) = mpsc::channel::<StreamMessage>(100);
+    ws_listener(sender).await;
     let system = KompactConfig::default().build().expect("system");
     let server_client = system.create(|| ServerClient::new(ClientTypes::Websocket));
     system.start(&server_client);
@@ -31,8 +33,6 @@ async fn main() {
 }
 
 async fn ws_listener(sender: mpsc::Sender<StreamMessage>) -> Result<()> {
-    let channel = mpsc::channel::<StreamMessage>(100);
-
     let (mut ws_state, Response) = Client::connect_combined_async(
         BINANCE,
         vec![
