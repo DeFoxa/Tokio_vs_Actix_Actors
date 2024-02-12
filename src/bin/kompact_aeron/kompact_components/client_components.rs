@@ -16,26 +16,16 @@ where
 {
     ctx: ComponentContext<Self>,
     receiver: mpsc::Receiver<StreamMessage>,
-    /// using StreamName with combined_connection method on binance WS server for now, will add Options for other
-    /// connection methods later
-    // stream_names: Vec<String>,
-    //Option<string> until multiple exchange ws clients implemented, will default to Binance with
-    //const BINANCE hardcode in fn on_start() until then
-    // exchange: Option<String>,
     data_normalizer: ActorRefStrong<M>,
 }
 
 impl<M: Send + Debug> WebSocketComponent<M> {
     pub fn new(
-        // stream_names: Vec<String>,
-        // exchange: Option<String>,
         receiver: mpsc::Receiver<StreamMessage>,
         data_normalizer: ActorRefStrong<M>,
     ) -> Self {
         Self {
             ctx: ComponentContext::uninitialised(),
-            // stream_names,
-            // exchange: None,
             receiver,
             data_normalizer,
         }
@@ -46,7 +36,6 @@ impl<M: Send + Debug> ComponentLifecycle for WebSocketComponent<M> {
     fn on_start(&mut self) -> Handled {
         todo!();
         // self.spawn_local(move |async_self| async move {
-        //
         //     let (mut client, Response) =
         //         Client::connect_combined_owned(BINANCE, async_self.stream_names.clone())
         //             .await
@@ -60,7 +49,7 @@ impl<M: Send + Debug> ComponentLifecycle for WebSocketComponent<M> {
         //
         //     Handled::Ok
         // });
-        Handled::Ok
+        // Handled::Ok
     }
 }
 impl<M: Send + Debug> Actor for WebSocketComponent<M> {

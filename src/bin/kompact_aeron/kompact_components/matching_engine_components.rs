@@ -2,7 +2,7 @@ use std::sync::mpsc;
 use tokio::join;
 
 use crate::kompact_components::client_components::*;
-use crate::types::*;
+use crate::{server_client::*, types::*};
 use anyhow::Result;
 use tokio::net::TcpStream;
 // use futures::stream::StreamExt;
