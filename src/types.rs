@@ -1,8 +1,5 @@
-use crate::concurrency_setup::actix_actor_model::*;
+// use crate::binancetrades;
 use crate::models::*;
-use actix::prelude::*;
-
-use std::time::{Instant};
 // use crate::schema::*;
 use crate::schema::{binancepartialbook, binancetrades};
 use crate::utils::*;
@@ -13,10 +10,10 @@ use serde::{
     de::{self, Deserializer as deser, SeqAccess, Visitor},
     Deserialize, Deserializer, Serialize,
 };
-use std::collections::{BinaryHeap};
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicU32, Ordering};
-
+use std::sync::Arc;
 
 pub trait ToTakerTrades {
     fn to_trades_type(&self) -> Result<TakerTrades>;
@@ -85,7 +82,7 @@ pub struct BookState {
 }
 
 impl BookState {
-    pub fn update_from_orderbook<T>(self, _orderbook_update: &T) -> Self {
+    pub fn update_from_orderbook<T>(mut self, orderbook_update: &T) -> Self {
         // self.timestamp = Some(orderbook_update.timestamp);
         self
     }
@@ -307,42 +304,6 @@ impl DeserializeExchangeStreams {
         deserializer.deserialize_seq(StringArrayToF64ArrayVisitor)
     }
 }
-
-pub struct MatchingEngineActors {
-    pub sequencer_actor: Addr<SequencerActor>,
-    pub trade_stream_actor: Addr<TradeStreamActor>,
-    pub book_actor: Addr<BookModelStreamActor>,
-    pub matching_engine_actor: Addr<MatchingEngineActor>,
-}
-
-impl MatchingEngineActors {
-    pub async fn new() -> Self {
-        let matching_engine_actor = MatchingEngineActor { data: 1 }.start();
-        let seq_actor = SequencerActor {
-            queue: BinaryHeap::new(),
-            matching_engine_addr: matching_engine_actor.clone(),
-            last_ob_update: Instant::now(),
-            is_processing_paused: false,
-        }
-        .start();
-
-        let trade_stream_actor = TradeStreamActor {
-            sequencer_addr: seq_actor.clone(),
-        }
-        .start();
-        let book_actor = BookModelStreamActor {
-            sequencer_addr: seq_actor.clone(),
-        }
-        .start();
-        Self {
-            sequencer_actor: seq_actor.clone(),
-            trade_stream_actor: trade_stream_actor,
-            book_actor: book_actor,
-            matching_engine_actor: matching_engine_actor,
-        }
-    }
-}
-
 pub trait ToDbModel {
     type DbModel: Insertable<binancetrades::table>;
 
@@ -405,7 +366,6 @@ impl ToDbModel for BinanceTrades {
         }
     }
 }
-
 impl ToBookModels for BinancePartialBookModelInsertable {
     fn to_bookstate(&self) -> Result<BookState> {
         todo!();

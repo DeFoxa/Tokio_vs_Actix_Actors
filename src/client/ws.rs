@@ -180,6 +180,9 @@ impl StreamNameGenerator {
     pub async fn combined_stream_trades_by_symbol(symbol: &str) -> String {
         format!("{}@aggTrade", &symbol)
     }
+    // pub async fn book_depth(symbol: &str, update_speed: &str) {
+    //     format!("{}@depth@100ms")
+    // }
 
     /// Ticker KLINE for some timeframe
     pub async fn kline(symbol: &str, timeframe: &str) -> String {
@@ -191,11 +194,11 @@ impl StreamNameGenerator {
     }
     /// L2 Book for individual ticker - with price level specifier - level options: 5, 10, 20
     pub async fn partial_book(symbol: &str, depth_levels: &str) -> String {
-        format!("{}/ws/{}@depth{}", &MAINNET, &symbol, &depth_levels)
+        format!("{}/ws/{}@depth{}@100ms", &MAINNET, &symbol, &depth_levels)
     }
 
     pub async fn combined_stream_partial_book(symbol: &str, depth_levels: &str) -> String {
-        format!("{}@depth{}", &symbol, &depth_levels)
+        format!("{}@depth{}@100ms", &symbol, &depth_levels)
     }
 
     /// AllBook streams BBO for every ticker

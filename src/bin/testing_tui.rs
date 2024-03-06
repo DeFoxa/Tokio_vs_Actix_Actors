@@ -34,7 +34,8 @@ use crossterm::{
     ExecutableCommand,
 };
 use ratatui::{
-    prelude::{CrosstermBackend, Frame, Stylize, Terminal},
+    // prelude::{CrosstermBackend, Frame, Stylize, Terminal},
+    prelude::*,
     widgets::Paragraph,
 };
 
@@ -54,10 +55,25 @@ struct App {
 }
 
 fn ui(app: &App, frame: &mut Frame) {
+    // frame.render_widget(
+    //     Paragraph::new(format!("Counter: {}", app.counter)),
+    //     frame.size(),
+    // );
+
+    let layout: Rect = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(frame.size());
     frame.render_widget(
-        Paragraph::new(format!("Counter: {}", app.counter)),
-        frame.size(),
+        Paragraph::new(
+            format!("Counter: {}", app.counter).block(Block::new().borders(Borders::ALL)),
+        ),
+        layout,
     );
+    // for i in 0..10 {
+    //     let area = Rect::new(0, i, frame.size().width, 3);
+    //     frame.render_widget(Paragraph::new(format!("Counter: {}", app.counter)), area);
+    // }
 }
 
 fn update(app: &mut App) -> Result<()> {

@@ -147,7 +147,7 @@ impl<T: ToTakerTrades + Display + Debug + 'static> Handler<TradeStreamMessage<T>
         tracing::info!("test 2 ");
 
         // println!("data {}", tt);
-        return Ok(tt);
+        Ok(tt)
     }
 }
 /// OB_UPDATE Message/Actor  
@@ -197,7 +197,7 @@ impl<T: ToBookModels + Debug + 'static> Handler<BookModelStreamMessage<T>>
         tracing::info!("BookModelStreamMessage handler");
 
         // println!("data {}", tt);
-        return Ok(book);
+        Ok(book)
     }
 }
 
