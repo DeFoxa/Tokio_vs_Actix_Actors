@@ -36,7 +36,7 @@ pub const MAINNET: &str = "wss://fstream.binance.com";
 #[actix_rt::main]
 async fn main() -> Result<()> {
     let file_appender =
-        tracing_appender::rolling::minutely(".logs/jan_25_logs", "concurrency_model_testing.log");
+        tracing_appender::rolling::minutely(".logs/actix_logs", "concurrency_model_testing.log");
 
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
     tracing_subscriber::fmt().with_writer(non_blocking).init();
