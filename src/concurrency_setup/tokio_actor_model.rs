@@ -159,20 +159,22 @@ pub async fn run_book_actor<T: ToBookModels + Send + Sync>(
 // Sequencer Thread NOTE:
 //
 // The sequencer thread handles ordering of two message types(this may grow
-// as we incorporate other ob stream data), Trade Stream and OB update messages. The thread contain
-// three actors, the sequencer logic, statemanagement for the sequencer and a timer to handle state management.
-// OB updates determine orderbook state and update every 250ms, if the ob updates are late or cut
-// off for some reason, then the matching engine state is no longer accurate and the sequencer
-// thread must be paused. The state actor and timer actor look at incoming ob update messages and
-// time their arrival. If the arrival is late, in this case we are testing late as > 1000ms then
-// the system is paused (the 1000ms cutoff can be lowered later). When this happens the sequencer
+// as we incorporate other ob stream data), Trade Stream and OB update messages. The thread
+// contains three actors, the sequencer logic, statemanagement for the sequencer and a timer
+// to handle state management.
+//
+// OB updates determine orderbook state and update every 250ms(for test exchange),
+// if the ob updates are late or cut off for some reason, then the matching engine
+// state is no longer accurate and the sequencer thread must be paused. The state
+// actor and timer actor look at incoming ob update messages and time their arrival.
+// If the arrival is late, in this case we are testing late as > 1000ms then the
+// system is paused (the 1000ms cutoff can be lowered later). When this happens the sequencer
 // state changes to paused = true and all incoming trade stream messages are rerouted to a queue,
 // where they are sorted by timestamp. When the new ob_update comes through than the associated
 // timestamp is logged and only the messages that are queued after the ob update timestamp are
 // sent to the matching engine  along with the ob_update
 //
-// Eventually instead of processing pauses, I'll add the GET requests to fill in ob state but for
-// now pauses are fine
+// Eventually instead of processing pauses, I'll add the GET requests to fill in ob state.
 
 ///
 /// SEQUENCER
@@ -309,9 +311,7 @@ impl SequencerActor {
 
     pub async fn process_queue(&mut self, ob_update_timestamp: SequencerMessage) {
         // NOTE: this implementation assumes sequential, sorted, ordering  by timestamp, of the incoming stream data
-        //  must be verified that this is the common behavior of the stream data. Obviously the binary search is
-        //  worthless if the timestamps aren't actually sequentially entering queue by ts, but from what i've seen
-        //  re: local_id/timestamp ordering, it should be naturally sorted but I'll verify later. More interested
+        //  must be verified that this is the common behavior of the stream data. More interested
         //  in the diff b/w backpressure/capacity of the different concurrency models.
 
         self.queue
@@ -371,11 +371,11 @@ pub struct TimerActor {
     state_management_sender: mpsc::Sender<StateManagementMessage>,
 }
 
-/// TimerActor is a watchdog for the orderbook state updates. OB stream updates come every ~250ms,
-/// in the current implementation an interval is set for 1s, should no ob update come in
+/// TimerActor is a watcher for the orderbook state updates. OB stream updates come every ~250ms,
+/// in the current implementation an interval is set for 1000ms, should no ob update come in
 /// that period then a SequencerStateMessage is sent to set processing to paused until a new ob
 /// update comes through. Eventually I'll change this to integrate rest requests for filling blanks
-/// when stream isn't updating.
+/// during bugged stream state.
 impl TimerActor {
     pub async fn run_timer(&mut self) -> Result<()> {
         let mut interval = tokio::time::interval(Duration::from_secs(1));
