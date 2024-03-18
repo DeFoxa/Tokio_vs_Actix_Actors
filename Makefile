@@ -8,20 +8,16 @@ diesel:
 tokio: 
 	cargo run --bin tokio_framework
 
+tokio log:
+	RUST_LOG=info cargo run --bin tokio_framework
+
 actix: 
 	cargo run --bin actix_framework
+
+actix log:
+	RUST_LOG=info cargo run --bin actix_framework
 
 test:
 	cargo run --bin model_testing
 
-tui:
-	cargo run --bin testing_tui 
 
-debug kompact:
-	cargo run --bin kompact_aeron 
-
-kompact:
-	cargo run --release --bin kompact_aeron
-
-watch kompact:
-	cargo watch -x 'run --bin kompact_aeron'

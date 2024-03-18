@@ -1,3 +1,4 @@
-Crate Overview: 
- - Setting up stream clients from Binance (might add other exchange clients later) to test different concurrency models. General flow is to create a combined stream to aggTrade and depthUpdate then deserialize incoming messages and use the concurrency model to process/format, create OB/Trade stream and matching engine, tracing and logging along the way to better understand the concurrency model.  
-    - Models: Initial focus is on variations of Actor Model. First imlementation will be standard Actix model. Second will be Actor model with Tokio (see Alice Ryhl blog post and lecture). Then moving on to a standard crossbeam or tokio bounded channel implementation.
+General Overview: 
+    - Testing Variations of actor models. Specifically, Actix and a lower level direct tokio actor model: following Alice Rhyl (tokio team-member) lecture/paper. 
+    - Components: Websocket client, Generate stream subscription, desrialize and send incoming data into actor framework for normalization -> sequencing and routing to a mock matching engine. 
+
