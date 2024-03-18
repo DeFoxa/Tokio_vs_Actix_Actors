@@ -8,6 +8,8 @@ use std::{fmt::Debug, sync::Arc, time::Duration};
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::instrument;
 
+//TODO: Add full actor and message lifecycle tracing
+
 ///
 /// Trade Stream Actor
 ///

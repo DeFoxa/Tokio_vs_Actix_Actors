@@ -19,9 +19,7 @@ use std::{
 };
 use tracing::instrument;
 
-//
-// TODO: Fix the unnecessary clones tomorrow
-//
+//TODO: Add full actor and message lifecycle tracing
 
 //
 // TRADE STREAM -> Database Actor/Message handling
