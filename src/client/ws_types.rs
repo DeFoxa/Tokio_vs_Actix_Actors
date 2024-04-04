@@ -62,6 +62,7 @@ impl Client {
             .collect::<Vec<_>>()
             .join("/");
         let full_url = format!("{}/ws/{}", url, combined_path);
+        println!("{:?}", full_url);
 
         let (socket, response) = connect_async(Url::parse(&full_url).unwrap()).await?;
         log::info!("connected to {}", url);

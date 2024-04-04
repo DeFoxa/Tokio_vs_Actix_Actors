@@ -371,11 +371,11 @@ pub struct TimerActor {
     state_management_sender: mpsc::Sender<StateManagementMessage>,
 }
 
-/// TimerActor is a watcher for the orderbook state updates. OB stream updates come every ~250ms,
+/// TimerActor is a watcher for the orderbook state updates. OB stream updates come every ~100ms,
 /// in the current implementation an interval is set for 1000ms, should no ob update come in
 /// that period then a SequencerStateMessage is sent to set processing to paused until a new ob
-/// update comes through. Eventually I'll change this to integrate rest requests for filling blanks
-/// during bugged stream state.
+/// update comes through. impl TimerActor {
+///
 impl TimerActor {
     pub async fn run_timer(&mut self) -> Result<()> {
         let mut interval = tokio::time::interval(Duration::from_secs(1));
