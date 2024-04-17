@@ -156,14 +156,8 @@ pub async fn run_book_actor<T: ToBookModels + Send + Sync>(
     }
     Ok(())
 }
-// Sequencer Thread NOTE:
-//
-// The sequencer thread handles ordering of two message types(this may grow
-// as we incorporate other ob stream data), Trade Stream and OB update messages. The thread
-// contains three actors, the sequencer logic, statemanagement for the sequencer and a timer
-// to handle state management.
-//
-// OB updates determine orderbook state and update every 250ms(for test exchange),
+
+// OB updates determine orderbook state and update every 100ms(for test exchange),
 // if the ob updates are late or cut off for some reason, then the matching engine
 // state is no longer accurate and the sequencer thread must be paused. The state
 // actor and timer actor look at incoming ob update messages and time their arrival.
@@ -174,7 +168,6 @@ pub async fn run_book_actor<T: ToBookModels + Send + Sync>(
 // timestamp is logged and only the messages that are queued after the ob update timestamp are
 // sent to the matching engine  along with the ob_update
 //
-// Eventually instead of processing pauses, I'll add the GET requests to fill in ob state.
 
 ///
 /// SEQUENCER

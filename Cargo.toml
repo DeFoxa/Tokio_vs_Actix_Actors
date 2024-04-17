@@ -8,10 +8,6 @@ edition = "2021"
 name = "lib"
 path = "src/lib.rs"
 
-[[bin]]
-name = "kompact_aeron"
-path = "src/bin/kompact_aeron/main.rs"
-
 [dependencies]
 tokio-tungstenite = { version = "0.20.0", features = ["native-tls"] }
 crossbeam = "0.8.4"
@@ -43,4 +39,5 @@ flume = "0.11.0"
 ratatui = { version = "0.25.0", features = ["all-widgets"] }
 crossterm = "0.27.0"
 kompact = "0.11.2"
+csv = "1.3.0"
 

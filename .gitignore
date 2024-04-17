@@ -1,5 +1,6 @@
 /target
 /.logs
 /.env
-/src/bin/source_data.rs
+src/bin/source_data.rs
+src/bin/load_test_harness.rs
 

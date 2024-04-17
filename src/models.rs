@@ -1,10 +1,10 @@
 use crate::schema::{binancepartialbook, binancetrades};
-
+use serde::Serialize;
 
 use diesel::{Insertable, Queryable};
 use serde_json::Value as JsonValue;
 
-#[derive(Queryable, Debug)]
+#[derive(Queryable, Debug, Serialize)]
 #[diesel(table_name = binancetrades)]
 pub struct BinanceTradesModel {
     pub id: i32,
