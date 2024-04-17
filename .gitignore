@@ -1,2 +1,5 @@
 /target
 /.logs
+/.env
+/src/bin/source_data.rs
+
