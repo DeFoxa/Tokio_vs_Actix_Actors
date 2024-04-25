@@ -155,6 +155,7 @@ pub async fn run_book_actor<T: ToBookModels + Send + Sync>(
     Ok(())
 }
 
+//NOTE for future ref:
 // if the ob updates are late or cut off for some reason, then the matching engine
 // state is no longer accurate and the sequencer thread is paused. The state
 // actor and timer actor look at incoming ob update messages and time their arrival.

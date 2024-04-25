@@ -6,23 +6,14 @@ use diesel::prelude::*;
 use dotenvy::dotenv;
 use futures_util::StreamExt;
 use lib::concurrency_setup::actix_actor_model::*;
-use lib::concurrency_setup::tokio_actor_model::TradeStreamActorHandler;
-use lib::concurrency_setup::tokio_actor_model::{
-    MatchingEngineActor as MEA, MatchingEngineHandler, MatchingEngineMessage,
-    OrderBookActorHandler, OrderBookStreamMessage as OBSM, SequencerActor as SA, SequencerHandler,
-    SequencerMessage as SM, StateManagementMessage, TradeStreamActor as TSA,
-    TradeStreamMessage as TSM,
-};
-use lib::schema::binancetrades::dsl::*;
 use lib::{
     client::{ws::*, ws_types::*},
     types::*,
     utils::*,
 };
 use serde_json::Value;
-use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream};
+use tokio_tungstenite::tungstenite::Message;
 
-use serde::Deserialize;
 use std::env;
 
 pub const MAINNET: &str = "wss://fstream.binance.com";
