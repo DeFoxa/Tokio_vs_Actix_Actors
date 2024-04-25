@@ -8,8 +8,6 @@ use std::{fmt::Debug, sync::Arc, time::Duration};
 use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::instrument;
 
-//TODO: Add full actor and message lifecycle tracing
-
 ///
 /// Trade Stream Actor
 ///
@@ -157,17 +155,15 @@ pub async fn run_book_actor<T: ToBookModels + Send + Sync>(
     Ok(())
 }
 
-// OB updates determine orderbook state and update every 100ms(for test exchange),
 // if the ob updates are late or cut off for some reason, then the matching engine
-// state is no longer accurate and the sequencer thread must be paused. The state
+// state is no longer accurate and the sequencer thread is paused. The state
 // actor and timer actor look at incoming ob update messages and time their arrival.
-// If the arrival is late, in this case we are testing late as > 1000ms then the
-// system is paused (the 1000ms cutoff can be lowered later). When this happens the sequencer
+// If the arrival is late, in this case, arrival > 1000ms then the
+// system is paused. If ob previous update > 1000ms the sequencer
 // state changes to paused = true and all incoming trade stream messages are rerouted to a queue,
-// where they are sorted by timestamp. When the new ob_update comes through than the associated
-// timestamp is logged and only the messages that are queued after the ob update timestamp are
-// sent to the matching engine  along with the ob_update
-//
+// where they are sorted by timestamp. On new ob_update the associated timestamp is logged and
+// only the messages that are queued after the ob update timestamp are sent to the matching engine
+// along with the ob_update
 
 ///
 /// SEQUENCER
@@ -303,10 +299,6 @@ impl SequencerActor {
     }
 
     pub async fn process_queue(&mut self, ob_update_timestamp: SequencerMessage) {
-        // NOTE: this implementation assumes sequential, sorted, ordering  by timestamp, of the incoming stream data
-        //  must be verified that this is the common behavior of the stream data. More interested
-        //  in the diff b/w backpressure/capacity of the different concurrency models.
-
         self.queue
             .make_contiguous()
             .sort_by(|a, b| a.transaction_timestamp.cmp(&b.transaction_timestamp));
@@ -364,11 +356,6 @@ pub struct TimerActor {
     state_management_sender: mpsc::Sender<StateManagementMessage>,
 }
 
-/// TimerActor is a watcher for the orderbook state updates. OB stream updates come every ~100ms,
-/// in the current implementation an interval is set for 1000ms, should no ob update come in
-/// that period then a SequencerStateMessage is sent to set processing to paused until a new ob
-/// update comes through. impl TimerActor {
-///
 impl TimerActor {
     pub async fn run_timer(&mut self) -> Result<()> {
         let mut interval = tokio::time::interval(Duration::from_secs(1));
@@ -410,17 +397,9 @@ impl SequencerHandler {
         JoinHandle<()>,
         JoinHandle<()>,
     )> {
-        // NOTE, for later reference: centralized instantiator of all sequencer channels,
-        // includign timer. This method will be called from main() or whatever other function
-        // handles the actor system. ruN_timer() should be called from sequenceractor run(), with
-        // ob_update messages passed to the matching-engine, ResumeProcess matched to current
-        // state and run_timer for interval resets.
-
         let (sequencer_sender, sequencer_receiver) = mpsc::channel::<SequencerMessage>(32);
         let (state_sender, state_receiver) = mpsc::channel::<StateManagementMessage>(32);
         let (timer_sender, timer_receiver) = mpsc::channel::<SequencerMessage>(32);
-        // let (matching_engine_sender, matching_engine_receiver) =
-        //     mpsc::channel::<MatchingEngineMessage>(32);
 
         let mut sequencer_actor = SequencerActor::new(
             sequencer_receiver,

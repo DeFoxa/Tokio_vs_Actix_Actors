@@ -1,5 +1,6 @@
 #![allow(unused)]
 use actix::Actor;
+use anyhow::Result;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenvy::dotenv;
@@ -13,27 +14,22 @@ use lib::concurrency_setup::tokio_actor_model::{
     TradeStreamMessage as TSM,
 };
 use lib::schema::binancetrades::dsl::*;
-use serde_json::Value;
-// use tungstenite::Message;
-use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream};
-// use lib::{schema::binancetrades, types::*};
-use anyhow::Result;
 use lib::{
     client::{ws::*, ws_types::*},
     types::*,
     utils::*,
 };
+use serde_json::Value;
+use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream};
 
 use serde::Deserialize;
 use std::env;
 
 pub const MAINNET: &str = "wss://fstream.binance.com";
 
-// #[tokio::main]
 #[actix_rt::main]
 async fn main() -> Result<()> {
     book_data_to_db().await?;
-    // todo!();
     Ok(())
 }
 fn establish_connection() -> PgConnection {
@@ -47,7 +43,7 @@ fn establish_connection() -> PgConnection {
 async fn book_data_to_db() -> Result<()> {
     let pool = create_db_pool();
     let db_actor = TradeStreamDBActor { pool: pool.clone() }.start();
-    let book_db_actor = BookModelDbActor { pool: pool }.start();
+    let book_db_actor = BookModelDbActor { pool }.start();
 
     let (mut ws_state, Response) = Client::connect_combined_async(
         MAINNET,

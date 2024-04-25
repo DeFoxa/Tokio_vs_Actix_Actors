@@ -1,6 +1,4 @@
-// use crate::binancetrades;
 use crate::models::*;
-// use crate::schema::*;
 use crate::schema::{binancepartialbook, binancetrades};
 use crate::utils::*;
 use anyhow::Result;
@@ -57,7 +55,6 @@ pub struct BookModel {
     pub bids: Vec<Quotes>,
     pub asks: Vec<Quotes>,
     pub timestamp: i64,
-    // pub exchange_id: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -75,17 +72,10 @@ pub struct BookState {
     pub bo_level: f32,
     pub bb_quantity: f32,
     pub bo_quantity: f32,
-    pub bid_depth: f32, // quantity quoted calculated to 2% from bb
-    pub ask_depth: f32, // quantity quoted calculated to 2% from bo
+    pub bid_depth: f32,
+    pub ask_depth: f32,
     pub spread: f32,
-    pub slippage_per_tick: f32, // percentage (decimal) relative to contract tick size
-}
-
-impl BookState {
-    pub fn update_from_orderbook<T>(mut self, orderbook_update: &T) -> Self {
-        // self.timestamp = Some(orderbook_update.timestamp);
-        self
-    }
+    pub slippage_per_tick: f32,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -191,7 +181,7 @@ impl ToTakerTrades for BinanceTrades {
         };
         Ok(TakerTrades {
             symbol: self.symbol.clone(),
-            side: side,
+            side,
             price: self.price,  /* .parse::<f64>()? */
             qty: self.quantity, /* .parse::<f64>()? */
             local_ids: NEXT_ID.fetch_add(1, Ordering::Relaxed),
@@ -203,7 +193,7 @@ impl ToTakerTrades for BinanceTrades {
 
 impl ToBookModels for BinancePartialBook {
     fn to_bookstate(&self) -> Result<BookState> {
-        todo!();
+        unimplemented!()
     }
 
     fn to_book_model(&self) -> Result<BookModel> {
@@ -313,11 +303,11 @@ pub trait ToDBBookModel {
     type DbModel: Insertable<binancepartialbook::table>;
     fn to_db_model(&self) -> Self::DbModel;
 }
-impl ToDbModel for BinanceTradesNewModel {
-    type DbModel = BinanceTradesNewModel;
+impl ToDbModel for BinanceTradesDBModel {
+    type DbModel = BinanceTradesDBModel;
 
     fn to_db_model(&self) -> Self::DbModel {
-        BinanceTradesNewModel {
+        BinanceTradesDBModel {
             event_type: Some(self.event_type.clone().unwrap()),
             event_time: Some(self.event_time).unwrap(),
             symbol: Some(self.symbol.clone()).unwrap(),
@@ -331,7 +321,7 @@ impl ToDbModel for BinanceTradesNewModel {
         }
     }
 }
-impl ToTakerTrades for BinanceTradesNewModel {
+impl ToTakerTrades for BinanceTradesDBModel {
     fn to_trades_type(&self) -> Result<TakerTrades> {
         let side = match self.is_buyer_mm.unwrap() {
             true => Side::Sell,
@@ -339,7 +329,7 @@ impl ToTakerTrades for BinanceTradesNewModel {
         };
         Ok(TakerTrades {
             symbol: self.symbol.clone().unwrap().to_string(),
-            side: side,
+            side,
             price: self.price.unwrap(),
             qty: self.quantity.unwrap(),
             local_ids: NEXT_ID.fetch_add(1, Ordering::Relaxed),
@@ -349,10 +339,10 @@ impl ToTakerTrades for BinanceTradesNewModel {
     }
 }
 impl ToDbModel for BinanceTrades {
-    type DbModel = BinanceTradesNewModel;
+    type DbModel = BinanceTradesDBModel;
 
     fn to_db_model(&self) -> Self::DbModel {
-        BinanceTradesNewModel {
+        BinanceTradesDBModel {
             event_type: Some(self.event_type.clone()),
             event_time: Some(self.event_time),
             symbol: Some(self.symbol.clone()),
@@ -368,11 +358,11 @@ impl ToDbModel for BinanceTrades {
 }
 impl ToBookModels for BinancePartialBookModelInsertable {
     fn to_bookstate(&self) -> Result<BookState> {
-        todo!();
+        unimplemented!()
     }
 
     fn to_book_model(&self) -> Result<BookModel> {
-        todo!();
+        unimplemented!()
     }
 }
 impl ToDBBookModel for BinancePartialBook {

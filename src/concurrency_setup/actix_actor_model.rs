@@ -1,5 +1,5 @@
 use crate::{
-    models::{BinancePartialBookModelInsertable, BinanceTradesNewModel},
+    models::{BinancePartialBookModelInsertable, BinanceTradesDBModel},
     schema::{binancepartialbook, binancetrades},
     types::*,
 };
@@ -19,12 +19,7 @@ use std::{
 };
 use tracing::instrument;
 
-//TODO: Add full actor and message lifecycle tracing
-
-//
-// TRADE STREAM -> Database Actor/Message handling
-//
-
+/// TRADE STREAM -> Database Actor/Message handling
 #[derive(Debug)]
 pub struct TradeStreamDBMessage<T>
 where
@@ -46,12 +41,12 @@ impl Actor for TradeStreamDBActor {
     type Context = Context<Self>;
 }
 
-impl Handler<TradeStreamDBMessage<BinanceTradesNewModel>> for TradeStreamDBActor {
+impl Handler<TradeStreamDBMessage<BinanceTradesDBModel>> for TradeStreamDBActor {
     type Result = Result<()>;
 
     fn handle(
         &mut self,
-        msg: TradeStreamDBMessage<BinanceTradesNewModel>,
+        msg: TradeStreamDBMessage<BinanceTradesDBModel>,
         _ctx: &mut Context<Self>,
     ) -> Self::Result {
         let db_model = msg.data.to_db_model();
@@ -98,7 +93,7 @@ impl Handler<BookModelDbMessage<BinancePartialBookModelInsertable>> for BookMode
     }
 }
 
-/// TradeStream from deserialized exchange specific type to generalized TakerTrades type
+/// TradeStream
 #[derive(Debug)]
 pub struct TradeStreamMessage<T>
 where
@@ -144,7 +139,6 @@ impl<T: ToTakerTrades + Display + Debug + 'static> Handler<TradeStreamMessage<T>
 
         tracing::info!("test 2 ");
 
-        // println!("data {}", tt);
         Ok(tt)
     }
 }
@@ -194,17 +188,10 @@ impl<T: ToBookModels + Debug + 'static> Handler<BookModelStreamMessage<T>>
             .do_send(SequencerMessage::BookModelUpdate(book.clone()));
         tracing::info!("BookModelStreamMessage handler");
 
-        // println!("data {}", tt);
         Ok(book)
     }
 }
 
-/// Going to build a Sequencer as a middleman between the OB_update/trade streams and the matching engine
-/// to ensure proper sequential ordering of the messages, using exchange timestamps
-/// How the Sequencer works: OB update data comes in every 250ms, trade stream is theoretically
-/// fifo from the exchange. we are going to queue messages in blocks of 250ms, so 1 ob update per
-/// outgoing message block. any trade stream updates that are prior to the next 250ms interval go
-/// out immediately, the rest
 /// Sequencer Actor
 
 #[derive(Debug)]
@@ -327,9 +314,8 @@ impl Handler<CheckAndForward> for SequencerActor {
         ctx.notify_later(CheckAndForward, Duration::from_millis(10));
     }
 }
-/// Matching engine Arbiter/Actor. Takes in data from OB_updates and Trade stream
-///
 
+/// Matching engine Arbiter/Actor
 #[derive(Debug, Clone)]
 pub struct MatchingEngineActor {
     pub data: i64,

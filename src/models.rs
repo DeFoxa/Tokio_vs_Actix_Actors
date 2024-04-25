@@ -22,7 +22,7 @@ pub struct BinanceTradesModel {
 
 #[derive(Insertable, Debug)]
 #[diesel(table_name = binancetrades)]
-pub struct BinanceTradesNewModel {
+pub struct BinanceTradesDBModel {
     pub event_type: Option<String>,
     pub event_time: Option<i64>,
     pub symbol: Option<String>,

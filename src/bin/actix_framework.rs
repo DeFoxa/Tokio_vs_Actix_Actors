@@ -1,35 +1,19 @@
 #![allow(warnings)]
 #[allow(unused_must_use)]
-use diesel::{prelude::*, PgConnection};
-use dotenvy::dotenv;
 use lib::concurrency_setup::actix_actor_model::*;
-use lib::concurrency_setup::tokio_actor_model::TradeStreamActorHandler;
-use lib::concurrency_setup::tokio_actor_model::{
-    MatchingEngineActor as MEA, MatchingEngineHandler, MatchingEngineMessage,
-    OrderBookActorHandler, OrderBookStreamMessage as OBSM, SequencerActor as SA, SequencerHandler,
-    SequencerMessage as SM, StateManagementMessage, TradeStreamActor as TSA,
-    TradeStreamMessage as TSM,
-};
-use lib::schema::binancetrades::dsl::*;
 use std::{collections::BinaryHeap, env};
-use tracing_subscriber::Layer;
 use tracing_subscriber::{filter::EnvFilter, fmt, prelude::*, registry::Registry};
 
 use actix::prelude::*;
-use actix_rt::{task::spawn_blocking, Arbiter, System};
 use anyhow::Result;
-use futures_util::{Stream, StreamExt};
-use lib::models::BinanceTradesNewModel;
+use futures_util::StreamExt;
 use lib::{
     client::{ws::*, ws_types::*},
     types::*,
-    utils::*,
 };
 use serde_json::Value;
-use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, oneshot};
+use std::time::Instant;
 use tokio_tungstenite::tungstenite::Message;
-use tracing_flame::FlameLayer;
 
 pub const MAINNET: &str = "wss://fstream.binance.com";
 
@@ -43,8 +27,6 @@ async fn main() -> Result<()> {
     stream_data_to_actix_matching_engine().await?;
     Ok(())
 }
-
-//
 
 async fn stream_data_to_actix_matching_engine() -> Result<()> {
     let matching_engine_addr = MatchingEngineActor { data: 1 }.start();
