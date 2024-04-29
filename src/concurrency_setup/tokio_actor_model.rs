@@ -198,7 +198,7 @@ pub struct SequencerActor {
     state_receiver: mpsc::Receiver<StateManagementMessage>,
     state_update: mpsc::Sender<StateManagementMessage>,
     timer_sender: mpsc::Sender<SequencerMessage>,
-    matching_engine_actor: mpsc::Sender<MatchingEngineMessage>,
+    matching_engine_actor: mpsc::Sender<MockMatchingEngineMessage>,
     pub queue: VecDeque<TakerTrades>,
     pub sequencer_state: SequencerState,
 }
@@ -209,7 +209,7 @@ impl SequencerActor {
         state_receiver: mpsc::Receiver<StateManagementMessage>,
         state_update: mpsc::Sender<StateManagementMessage>,
         timer_sender: mpsc::Sender<SequencerMessage>,
-        matching_engine_actor: mpsc::Sender<MatchingEngineMessage>,
+        matching_engine_actor: mpsc::Sender<MockMatchingEngineMessage>,
     ) -> Self {
         SequencerActor {
             receiver,
@@ -226,11 +226,11 @@ impl SequencerActor {
         //NOTE: handle SequencerState = Processing
         let matching_engine_msg = match msg {
             SequencerMessage::TakerTrade(trades) => {
-                MatchingEngineMessage::TakerTrade(Arc::new(trades))
+                MockMatchingEngineMessage::TakerTrade(Arc::new(trades))
             }
 
             SequencerMessage::BookModelUpdate(book_update) => {
-                MatchingEngineMessage::BookModelUpdate(book_update)
+                MockMatchingEngineMessage::BookModelUpdate(book_update)
             }
         };
 
@@ -319,7 +319,7 @@ impl SequencerActor {
         );
 
         for message in self.queue.drain(..index) {
-            let matching_engine_message = MatchingEngineMessage::TakerTrade(Arc::new(message));
+            let matching_engine_message = MockMatchingEngineMessage::TakerTrade(Arc::new(message));
             self.matching_engine_actor
                 .send(matching_engine_message)
                 .await;
@@ -392,7 +392,7 @@ pub struct SequencerHandler;
 
 impl SequencerHandler {
     pub fn new(
-        matching_engine_sender: mpsc::Sender<MatchingEngineMessage>,
+        matching_engine_sender: mpsc::Sender<MockMatchingEngineMessage>,
     ) -> Result<(
         mpsc::Sender<SequencerMessage>,
         JoinHandle<()>,
@@ -434,15 +434,15 @@ impl SequencerHandler {
 /// MATCHING ENGINE
 ///
 #[derive(Debug)]
-pub struct MatchingEngineActor {
-    pub receiver: mpsc::Receiver<MatchingEngineMessage>,
+pub struct MockMatchingEngineActor {
+    pub receiver: mpsc::Receiver<MockMatchingEngineMessage>,
     pub testing_counter: AtomicU32,
 }
 
 static NEXT_ID: AtomicU32 = AtomicU32::new(1);
 
-impl MatchingEngineActor {
-    pub async fn handle_message(&mut self, msg: MatchingEngineMessage) {
+impl MockMatchingEngineActor {
+    pub async fn handle_message(&mut self, msg: MockMatchingEngineMessage) {
         println!("MATCHING ENGINE MSG {:?}", msg);
         self.testing_counter = NEXT_ID.fetch_add(1, Ordering::Relaxed).into();
         println!("counter {:?}", self.testing_counter);
@@ -459,24 +459,24 @@ impl MatchingEngineActor {
     }
 }
 #[derive(Debug)]
-pub enum MatchingEngineMessage {
+pub enum MockMatchingEngineMessage {
     TakerTrade(Arc<TakerTrades>),
     BookModelUpdate(BookModel),
 }
 #[derive(Debug)]
-pub struct MatchingEngineHandler;
-impl MatchingEngineHandler {
-    pub fn new() -> Result<(mpsc::Sender<MatchingEngineMessage>, JoinHandle<()>)> {
+pub struct MockMatchingEngineHandler;
+impl MockMatchingEngineHandler {
+    pub fn new() -> Result<(mpsc::Sender<MockMatchingEngineMessage>, JoinHandle<()>)> {
         let (sender, receiver) = mpsc::channel(32);
-        let mut mea = MatchingEngineActor {
+        let mut mea = MockMatchingEngineActor {
             receiver,
             testing_counter: 0.into(),
         };
 
         let matching_engine_handle = tokio::spawn(async move {
             match mea.run().await {
-                Ok(_) => tracing::info!("MatchingEngineActor spawn success"),
-                Err(_) => tracing::debug!("Error spawning MatchingEngineActor"),
+                Ok(_) => tracing::info!("MockMatchingEngineActor spawn success"),
+                Err(_) => tracing::debug!("Error spawning MockMatchingEngineActor"),
             }
         });
 

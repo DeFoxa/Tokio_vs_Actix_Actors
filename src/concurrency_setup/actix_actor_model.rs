@@ -197,13 +197,13 @@ impl<T: ToBookModels + Debug + 'static> Handler<BookModelStreamMessage<T>>
 #[derive(Debug)]
 pub struct SequencerActor {
     pub queue: BinaryHeap<SequencerMessage>,
-    pub matching_engine_addr: Addr<MatchingEngineActor>,
+    pub matching_engine_addr: Addr<MockMatchingEngineActor>,
     pub last_ob_update: Instant,
     pub is_processing_paused: bool,
 }
 impl SequencerActor {
     #[instrument(target = "Sequencer Actor new")]
-    fn new(matching_engine_addr: Addr<MatchingEngineActor>) -> Self {
+    fn new(matching_engine_addr: Addr<MockMatchingEngineActor>) -> Self {
         SequencerActor {
             queue: BinaryHeap::new(),
             matching_engine_addr,
@@ -317,30 +317,30 @@ impl Handler<CheckAndForward> for SequencerActor {
 
 /// Matching engine Arbiter/Actor
 #[derive(Debug, Clone)]
-pub struct MatchingEngineActor {
+pub struct MockMatchingEngineActor {
     pub data: i64,
 }
 
-impl Actor for MatchingEngineActor {
+impl Actor for MockMatchingEngineActor {
     type Context = Context<Self>;
 }
 
-impl Handler<BookModel> for MatchingEngineActor {
+impl Handler<BookModel> for MockMatchingEngineActor {
     type Result = ();
 
-    #[instrument(target = "MatchingEngine BookModel handle")]
+    #[instrument(target = "MockMatchingEngine BookModel handle")]
     fn handle(&mut self, msg: BookModel, ctx: &mut Context<Self>) -> Self::Result {
-        tracing::info!("MatchingEngineActor Bookmodel handler");
+        tracing::info!("MockMatchingEngineActor Bookmodel handler");
         println!(" {:?}", msg);
     }
 }
 
-impl Handler<TakerTrades> for MatchingEngineActor {
+impl Handler<TakerTrades> for MockMatchingEngineActor {
     type Result = ();
 
-    #[instrument(target = "MatchingEngine TakerTrades handle")]
+    #[instrument(target = "MockMatchingEngine TakerTrades handle")]
     fn handle(&mut self, msg: TakerTrades, ctx: &mut Context<Self>) -> Self::Result {
-        tracing::info!("MatchingEngineActor TakerTrades handler");
+        tracing::info!("MockMatchingEngineActor TakerTrades handler");
         println!("{:?}", msg);
     }
 }

@@ -3,8 +3,8 @@ use anyhow::Result;
 use futures_util::StreamExt;
 use lib::concurrency_setup::tokio_actor_model::TradeStreamActorHandler;
 use lib::concurrency_setup::tokio_actor_model::{
-    MatchingEngineHandler, OrderBookActorHandler, OrderBookStreamMessage as OBSM, SequencerHandler,
-    TradeStreamMessage as TSM,
+    MockMatchingEngineHandler, OrderBookActorHandler, OrderBookStreamMessage as OBSM,
+    SequencerHandler, TradeStreamMessage as TSM,
 };
 use lib::{
     client::{ws::*, ws_types::*},
@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
 }
 
 async fn stream_data_to_tokio_matching_engine() -> Result<()> {
-    let (matching_engine_sender, matching_engine_handle) = MatchingEngineHandler::new()?;
+    let (matching_engine_sender, matching_engine_handle) = MockMatchingEngineHandler::new()?;
     let (sequencer_sender, sequencer_handle, timer_handle) =
         SequencerHandler::new(matching_engine_sender)?;
     let (trade_stream_sender, trade_stream_handle) =

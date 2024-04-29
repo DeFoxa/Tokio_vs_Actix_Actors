@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
 }
 
 async fn stream_data_to_actix_matching_engine() -> Result<()> {
-    let matching_engine_addr = MatchingEngineActor { data: 1 }.start();
+    let matching_engine_addr = MockMatchingEngineActor { data: 1 }.start();
     let seq_addr = SequencerActor {
         queue: BinaryHeap::new(),
         matching_engine_addr,
