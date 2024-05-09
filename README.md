@@ -1,7 +1,16 @@
 General Overview: 
 
-    - Testing Variations of actor models. Specifically, Actix and a lower level direct tokio actor model: following Alice Rhyl (tokio team-member) lecture/paper. 
-   
-    - Components: Websocket client, Generate stream subscription, deserialize and send incoming data into actor framework for normalization -> sequencing and routing to a mock matching engine. 
+## Methodology
+- Testing Variations of actor models: Actix and a lower level direct tokio actor model.
+- Tokio model following Alice Rhyl lecture/blog. 
 
-    - Concurrency model types located in concurrency setup
+## Components  
+- Websocket client: implementation to generate stream subscription
+- Deserializers  
+- Data Normalization from Actors
+- Sequencing and routing to a mock matching engine or DB
+- postgres/timescale integration 
+
+
+## NOTE
+- Concurrency model types located in concurrency setup
